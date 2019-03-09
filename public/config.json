@@ -1,0 +1,8 @@
+{
+  "wbb": {
+    "board01": {
+      "spoolDistanceCm": 70.0,
+      "script": "0.2,0.1\n0.7,0.63"
+    }
+  }
+}
