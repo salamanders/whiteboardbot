@@ -8,6 +8,7 @@ import lejos.hardware.port.MotorPort
 import lejos.robotics.RegulatedMotor
 import lejos.robotics.geometry.Point2D
 import lejos.robotics.geometry.Rectangle2D
+import lejos.utility.Delay
 import mu.KotlinLogging
 
 /**
@@ -37,10 +38,10 @@ class Plotter(
         spool0.synchronizeWith(arrayOf(spool1))
     }
 
-    private val spool0Length: Double
+    val spool0Length: Double
         get() = initialLengthCm + (spool0.tachoCount / 360.0) * TECHNIC_AXLE_CIRCUMFERENCE_CM
 
-    private val spool1Length: Double
+    val spool1Length: Double
         get() = initialLengthCm + (spool1.tachoCount / 360.0) * TECHNIC_AXLE_CIRCUMFERENCE_CM
 
     /**
@@ -88,7 +89,7 @@ class Plotter(
     /**
      * Required to be normalized 0..1 plotter location
      */
-    var location: Point2D
+    var location: Point2D.Double
         get() {
             val realLoc = stringsToXY(spoolDistanceCm, spool0Length, spool1Length)
             return Point2D.Double((realLoc.x - safeDrawingArea.x) / safeDrawingArea.width, (realLoc.y - safeDrawingArea.y) / safeDrawingArea.height)
@@ -107,7 +108,7 @@ class Plotter(
             LCD.setPixel((normalLoc.x * LCD.SCREEN_WIDTH).toInt(), (normalLoc.y * LCD.SCREEN_HEIGHT).toInt(), 1)
 
             val (targetLength0, targetLength1) = xyToStrings(Point2D.Double(0.0, 0.0), Point2D.Double(spoolDistanceCm, 0.0), realLoc)
-            LOG.info("Moving from $location to $normalLoc (real:$realLoc) l0:$targetLength0 l1:$targetLength1")
+            LOG.info("Moving from ${location.str} to ${normalLoc.str} (real:${realLoc.str}) l0:${targetLength0.str} l1:${targetLength1.str}")
 
             val delta0 = targetLength0 - spool0Length
             val targetTacho0 = lengthToTacho(targetLength0)
@@ -130,6 +131,10 @@ class Plotter(
             spool0.rotateTo(targetTacho0, false)
             spool1.rotateTo(targetTacho1, false)
             spool0.endSynchronization()
+            // TODO: Better!
+            while (spool0.isMoving || spool1.isMoving) {
+                Delay.msDelay(100)
+            }
         }
 
     private fun lengthToTacho(targetLength: Double): Int = (360.0 * (targetLength - initialLengthCm) / TECHNIC_AXLE_CIRCUMFERENCE_CM).toInt()

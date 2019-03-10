@@ -2,13 +2,20 @@ package info.benjaminhill.wbb
 
 import com.google.gson.JsonObject
 import com.google.gson.JsonParser
+import kotlinx.coroutines.*
+import lejos.hardware.Battery
 import lejos.robotics.geometry.Point2D
 import mu.KotlinLogging
 import java.net.URL
 import java.util.*
+import kotlin.coroutines.CoroutineContext
 
 
-class RemoteControl : AutoCloseable, Runnable {
+class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
+
+    private val job = Job()
+    override val coroutineContext: CoroutineContext get() = job + Dispatchers.Default
+
     private val config: JsonObject = JsonParser().parse(URL("https://whiteboardbot.firebaseapp.com/config.json").readText()).asJsonObject.getAsJsonObject("wbb").getAsJsonObject("board01")!!.also {
         LOG.debug { "RC config from web: $it" }
     }
@@ -19,10 +26,27 @@ class RemoteControl : AutoCloseable, Runnable {
         LOG.info { "RC created plotter" }
     }
 
-    //private val mqtt = MQTT() // TODO something with the commands
+    private val mqtt = MQTT()
 
-    override fun run() {
-        if (plotter.calibrate()) {
+    init {
+        LOG.info { "Launching 60 second telemetry" }
+        launch {
+            while (job.isActive) {
+                val (x, y) = plotter.location
+                mqtt.sendTelemetry(mapOf(
+                        "voltage" to Battery.getVoltageMilliVolt(),
+                        "x" to x,
+                        "y" to y,
+                        "spool0" to plotter.spool0Length,
+                        "spool1" to plotter.spool1Length
+                ))
+                delay(60 * 1_000)
+            }
+        }
+    }
+
+    override fun run() = runBlocking {
+        while (plotter.calibrate()) {
             config.get("script")?.asString?.let {
                 runScript(it)
             }
@@ -41,15 +65,17 @@ class RemoteControl : AutoCloseable, Runnable {
             }
         }
         LOG.info("RC plotting ${path.size} points.")
-        path.forEach {
-            plotter.location = Point2D.Double(it.x, it.y)
+        path.forEachIndexed { idx, point ->
+            LOG.info { "Script $idx: ${point.str}" }
+            plotter.location = Point2D.Double(point.x, point.y)
         }
     }
 
     override fun close() {
         LOG.info { "RC close()" }
-        //mqtt.close()
+        mqtt.close()
         plotter.close()
+        job.cancel()
     }
 
     companion object {

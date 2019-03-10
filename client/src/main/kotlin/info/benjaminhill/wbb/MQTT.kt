@@ -1,5 +1,6 @@
 package info.benjaminhill.wbb
 
+import com.google.gson.Gson
 import io.jsonwebtoken.Jwts
 import io.jsonwebtoken.SignatureAlgorithm
 import mu.KotlinLogging
@@ -10,7 +11,6 @@ import org.eclipse.paho.client.mqttv3.persist.MemoryPersistence
 import org.joda.time.DateTime
 import java.security.KeyFactory
 import java.security.spec.PKCS8EncodedKeySpec
-
 
 /**
  * https://console.cloud.google.com/iot/locations/us-central1/registries/wbb-registry/devices/ev3?project=whiteboardbot
@@ -38,17 +38,25 @@ class MQTT : AutoCloseable {
 
         if (client.isConnected) {
             client.subscribe(TOPIC)
-            LOG.info { "Done subscribing." }
-            // https://cloud.google.com/iot/docs/how-tos/commands#iot-core-send-command-nodejs
-            // `gcloud iot devices describe $DEVICE_ID --project=$GCP_PROJECT_ID --region=$GCP_REGION  --registry=$REGISTRY_NAME`
-            val message = MqttMessage("Hello World of MQTT - right back atcha!".toByteArray())
-            message.qos = 1
-            client.publish("/devices/$DEVICE_ID/events", message)
+            LOG.info { "Subscribing success." }
         } else {
             LOG.warn { "MQTT Client was unable to connect, skipped send and receive" }
         }
 
         LOG.debug { "MQTT:init:end" }
+    }
+
+    fun sendTelemetry(data: Map<String, Any>) {
+        if (!client.isConnected) {
+            LOG.info { "Not connected, so no sending telemetry" }
+            return
+        }
+        // https://cloud.google.com/iot/docs/how-tos/commands#iot-core-send-command-nodejs
+        // `gcloud iot devices describe $DEVICE_ID --project=$GCP_PROJECT_ID --region=$GCP_REGION  --registry=$REGISTRY_NAME`
+        val payload = GSON.toJson(data)!!
+        val message = MqttMessage(payload.toByteArray())
+        message.qos = 1
+        client.publish("/devices/$DEVICE_ID/events", message)
     }
 
     private fun connectWithExponentialRetry(client: MqttClient): MqttClient {
@@ -115,6 +123,8 @@ class MQTT : AutoCloseable {
         // Combined strings
         private const val TOPIC = "/devices/$DEVICE_ID/commands/#"
         private const val CLIENT_ID = "projects/$GCP_PROJECT_ID/locations/$GCP_REGION/registries/$REGISTRY_NAME/devices/$DEVICE_ID"
+
+        private val GSON = Gson()
     }
 }
 

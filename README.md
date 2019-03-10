@@ -1,13 +1,18 @@
 A LEGO EV3 setup with two motors winding strings that drag a dry erase marker around a whiteboard.
 
+## Architecture
+
+Firestore:
+
+* /devices/{id=ev3}
+* /telemetry/{id=ev3} 
+
 ## TODO
 
 ### MQTT bidirectional communication with Firestore
 
 * https://cloud.google.com/functions/docs/calling/cloud-firestore#deploying_your_function
 * https://cloud.google.com/iot/docs/how-tos/commands#iot-core-send-command-nodejs
-
-
 
 ## Deploy
 
@@ -27,7 +32,7 @@ To SSH into the robot:
 
 ## Thanks To
 
-https://www.marginallyclever.com/2012/02/drawbot-overview/
-http://www.patriciogonzalezvivo.com/2014/vPlotter/
-https://github.com/patriciogonzalezvivo/vPlotter
-http://fabacademy.org/archives/2013/labs/amsterdam/class_15_machinedesign/math.html
+* https://www.marginallyclever.com/2012/02/drawbot-overview/
+* http://www.patriciogonzalezvivo.com/2014/vPlotter/
+* https://github.com/patriciogonzalezvivo/vPlotter
+* http://fabacademy.org/archives/2013/labs/amsterdam/class_15_machinedesign/math.html

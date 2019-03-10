@@ -7,10 +7,16 @@ import java.util.*
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.random.Random
 
+
 /** Shorter round for the logs */
 val Double.str: String
-    get() = "%.2f".format(this)
+    get() = "%.3f".format(this)
 
+val Point2D.Double.str
+    get() = "{x:${this.x.str}, y:${this.y.str}"
+
+operator fun Point2D.Double.component1(): Double = this.x
+operator fun Point2D.Double.component2(): Double = this.y
 
 /** Simple REPL keys to commands that always have 'q' to quit */
 fun keyboardCommands() = sequence {
@@ -63,6 +69,8 @@ fun exponentialRetryDelayMs(): Sequence<Long> {
     }
 }
 
+/** For when you need a temp ID for the duration of an app run */
 val sessionId by lazy {
     "23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ".toList().shuffled().take(4).joinToString()
 }
+

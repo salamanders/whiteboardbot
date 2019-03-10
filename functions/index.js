@@ -1,23 +1,16 @@
+'use strict';
+
 const functions = require('firebase-functions');
 
-// // Create and Deploy Your First Cloud Functions
-// // https://firebase.google.com/docs/functions/write-firebase-functions
-//
+// https://firebase.google.com/docs/functions/write-firebase-functions
 exports.helloWorld = functions.https.onRequest((request, response) => {
   response.send("Hello from Firebase!");
 });
 
-'use strict';
-
-const functions = require('firebase-functions');
 const admin = require('firebase-admin');
 admin.initializeApp();
-
 const db = admin.firestore();
 
-
-// https://firebase.google.com/docs/functions/write-firebase-functions
-// firebase deploy --only functions
 exports.helloWorld = functions.https.onRequest((request, response) => {
   response.send("Hello from Firebase!");
 });
@@ -40,16 +33,15 @@ exports.dbToDevice = functions.firestore.document('wbb/{boardId}').onUpdate(asyn
   }
 });
 
-
 /**
  * Changes picked up from MQTT should be set on the doc
  * Test with `gcloud pubsub topics publish topic-name --message '{"name":"Xenia"}'`
  * @see https://firebase.google.com/docs/functions/pubsub-events
  */
-exports.deviceToDb = functions.pubsub.topic('projects/whiteboardbot/topics/my-device-events').onPublish((message, context) => {
+exports.deviceToDb = functions.pubsub.topic('my-device-events').onPublish((message, context) => {
   // context.timestamp, context.eventId
   //const name = message.json.name;
-  return db.collection('logs').document(context.params.boardId).collection('telemetry').add(message.json);
+  return db.collection('telemetry').document(context.params.boardId).add(message.json);
 });
 
 
@@ -59,7 +51,6 @@ exports.helloPubSub = (data, context) => {
   const name = pubSubMessage.data
     ? Buffer.from(pubSubMessage.data, 'base64').toString()
     : 'World';
-
   console.log(`Hello, ${name}!`);
 };
 

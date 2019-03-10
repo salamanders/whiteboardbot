@@ -1,0 +1,308 @@
+
+
+Couldn't run firestore on the Ev3:
+Error: Could not find TLS ALPN provider; no working netty-tcnative, Conscrypt, or Jetty NPN/ALPN available -->
+https://mvnrepository.com/artifact/org.eclipse.jetty.alpn/alpn-api -->
+https://mvnrepository.com/artifact/org.mortbay.jetty.alpn/jetty-alpn-agent -->
+
+<dependency>
+<groupId>org.mortbay.jetty.alpn</groupId>
+<artifactId>jetty-alpn-agent</artifactId>
+<version>2.0.9</version>
+</dependency>
+<dependency>
+<groupId>org.mortbay.jetty.alpn</groupId>
+<artifactId>alpn-boot</artifactId>
+<version>8.1.13.v20181017</version>
+</dependency>
+<dependency>
+<groupId>com.google.cloud</groupId>
+<artifactId>google-cloud-firestore</artifactId>
+<version>0.82.0-beta</version>
+</dependency>
+
+<dependency>
+<groupId>org.jetbrains.kotlinx</groupId>
+<artifactId>kotlinx-coroutines-core-common</artifactId>
+<version>${kotlin.coroutine.version}</version>
+</dependency>
+<dependency>
+<groupId>org.jetbrains.kotlinx</groupId>
+<artifactId>kotlinx-coroutines-core</artifactId>
+<version>${kotlin.coroutine.version}</version>
+</dependency>
+
+
+/**
+ * When the cloud tells you things, you should listen
+ * https://googleapis.github.io/google-cloud-java/google-cloud-clients/apidocs/index.html?com/google/cloud/firestore/package-summary.html
+ */
+private val updateFromCloudListener: ListenerRegistration = docRef.addSnapshotListener { snapshot, e ->
+    try {
+        e?.let { throw IllegalStateException(e) }
+        snapshot?.data?.filter { (key, value) ->
+            LOG.info("Acting on: '$key':'$value'")
+            key != null && value != null && !key.isBlank() && !value.toString().isBlank()
+        }?.forEach { (key, value) ->
+            when (key) {
+                "command" -> {
+                    when (value) {
+                        "retract0" -> plotter.retract0()
+                        "retract1" -> plotter.retract1()
+                        "markCenter" -> plotter.markCenter()
+                        else -> LOG.warn { "Ignoring unknown 'command':'$value' " }
+                    }
+                }
+                // List of [x,y\n...] coordinates in 0..1 space
+                "locations" -> {
+                    Scanner(value.toString()).useDelimiter("[^-.\\d]+").use { scanner ->
+                        while (scanner.hasNextDouble()) {
+                            val x = scanner.nextDouble()
+                            if (scanner.hasNextDouble()) {
+                                val y = scanner.nextDouble()
+                                plotter.location = Point2D.Double(x, y)
+                            }
+                        }
+                    }
+                }
+                else -> LOG.info { "Ignoring unknown '$key':'$value'" }
+            }
+        }
+        docRef.update(mapOf(
+                "command" to FieldValue.delete(),
+                "locations" to FieldValue.delete()
+        )).get()
+    } catch (t: Throwable) {
+        LOG.error { t }
+    }
+}
+
+
+/**
+ * A motor that winds/unwinds a string with `length`
+ * Forward = extend string
+ *
+ * @param motor may be real or virtual
+ * @param initialStringLengthCm assume you start mostly unrolled
+ */
+class Spool(private val motor: EncoderMotor, private val initialStringLengthCm: Double, x: Double = 0.0) : AutoCloseable {
+
+    val location = Point(x, 0.0) // Attached with duct tape, so it never moves
+    private val msPerCmFullPower: Double // max speed at full power
+
+    init {
+        motor.stop()
+        motor.resetTachoCount()
+        msPerCmFullPower = calcMsPerCmFullPower()
+        LOG.info("Spool:init (tacho:${motor.tachoCount}, msPerCmFullPower:${msPerCmFullPower.str}, length:${length.str}, axelcm:${AXLE_CIRCUMFERENCE_CM.str}")
+    }
+
+    /** Spin for 1 second at max power and see how far you travel */
+    private fun calcMsPerCmFullPower(): Double {
+        motor.stop()
+        motor.resetTachoCount()
+        val startLength = length
+        motor.power = MAX_POWER
+        val startMs = System.currentTimeMillis()
+        motor.forward()
+        Delay.msDelay(1_000)
+        motor.stop()
+        LOG.debug { "1000ms at $MAX_POWER: tacho:${motor.tachoCount}, length:${(startLength - length).str} " }
+        val msPerCm = Math.abs((System.currentTimeMillis() - startMs) / (startLength - length))
+        motor.backward()
+        Delay.msDelay(1_000)
+        motor.stop()
+        motor.resetTachoCount()
+        return msPerCm
+    }
+
+    var length: Double
+        get() = initialStringLengthCm + AXLE_CIRCUMFERENCE_CM * (motor.tachoCount / 360.0)
+        set(targetLength) {
+            if (targetLength > initialStringLengthCm * 2.0) {
+                LOG.warn { "Rejecting request to move beyond 2x%: $length to $targetLength" }
+                return
+            }
+            if (targetLength <= 0) {
+                LOG.warn { "Rejecting request to move to 0: $length to $targetLength" }
+                return
+            }
+
+            val startLength = length
+            val startDelta = Math.abs(startLength - targetLength)
+            val estimatedMs = (msPerCmFullPower * startDelta).toInt()
+            val maxEndTime = System.currentTimeMillis() + 3.0 * estimatedMs + 1_000
+
+            LOG.debug { "Start move from ${startLength.str} to ${targetLength.str} in ${estimatedMs}ms" }
+
+            // 1cm hops, slow as you get closer.  Hopefully power scales linearly?
+            // Do all the getting/setting outside the timing, calls to the motor can be slow
+            while (true) {
+                val currentLength = length
+
+                val distanceRemaining = targetLength - currentLength
+                if (Math.abs(distanceRemaining) < 0.5) {
+                    // Close enough!
+                    break
+                }
+
+                // Fixed amount of time per hop, vary the last step's power. Less than 1cm = partial power
+                var newPower = Math.min(MAX_POWER, (MAX_POWER * Math.abs(distanceRemaining)).toInt())
+
+                // Power is rounded, so don't slow down too much.
+                if (newPower < 50) {
+                    newPower += 1
+                }
+
+                if (System.currentTimeMillis() > maxEndTime) {
+                    LOG.warn { "  Move timed out: startLength:${startLength.str}, targetLength:${targetLength.str}, length:${currentLength.str}, estimatedMs:$estimatedMs" }
+                    break
+                }
+                if (startLength < targetLength && currentLength > targetLength) {
+                    LOG.info { "  Ending after extend overshoot (target:${targetLength.str}, length:${currentLength.str})." }
+                    break
+                }
+                if (startLength > targetLength && currentLength < targetLength) {
+                    LOG.info { "  Ending after retract undershoot (target:${targetLength.str}, length:${currentLength.str})." }
+                    break
+                }
+                motor.power = newPower
+                if (distanceRemaining > 0) {
+                    LOG.debug { "  Motor forwards/extend (length:${currentLength.str}, target:${targetLength.str}, power:$newPower, ms:${msPerCmFullPower.str})" }
+                    motor.forward()
+                } else {
+                    LOG.debug { "  Motor backwards/retract (length:${currentLength.str}, target:${targetLength.str}, power:$newPower, ms:${msPerCmFullPower.str})" }
+                    motor.backward()
+                }
+                Delay.msDelay(msPerCmFullPower.toLong())
+            }
+            motor.stop()
+            if (Math.abs(targetLength - length) > 1.0) {
+                LOG.warn { "Wobble!  Move ended more than 1cm away: moveStartLength:$startLength, targetLength:$targetLength, estimatedMoveMs:$estimatedMs" }
+            }
+        }
+
+    override fun close() {
+        LOG.info("Motor stopping and closing port")
+        try {
+            motor.stop()
+            if (motor is Closeable) {
+                motor.close()
+            }
+        } catch (e: Throwable) {
+            LOG.error { "Motor error closing:$e" }
+        }
+    }
+
+    companion object {
+        const val AXLE_CIRCUMFERENCE_CM = (2 * Math.PI * 2.5) / 10
+        const val MAX_POWER = 100
+        private val LOG = KotlinLogging.logger {}
+    }
+
+}
+
+
+
+/**
+ * If a brick is found, get a real motor.  If not, use a pretend motor.
+ * Can't use LeJOS because that only works when a brick is found
+ * TODO: EV3LargeRegulatedMotor are only local.  Otherwise use delays
+ */
+enum class VirtualPort {
+    A, B, C, D;
+
+    fun get(): EncoderMotor = try {
+        UnregulatedMotor(toPort())
+    } catch (e: Throwable) {
+        when (e) {
+            is DeviceException,
+            is ExceptionInInitializerError,
+            is NoClassDefFoundError -> {
+                LOG.warn { "Motor ${this.name} using virtual motor ($e ${e.localizedMessage})" }
+                VirtualMotor()
+            }
+            else -> throw e
+        }
+    }
+
+    private fun toPort(): Port = when (this) {
+        A -> MotorPort.A
+        B -> MotorPort.B
+        C -> MotorPort.C
+        D -> MotorPort.D
+    }
+
+    /**
+     * For when you left your EV3 at home
+     */
+    class VirtualMotor : EncoderMotor, AutoCloseable {
+        override fun close() {
+            stop()
+        }
+
+        private var power: Int = 0
+        private val speed // Actual running forward/backwards speed
+            get() = power.toDouble() * SLOWDOWN * direction
+        private var direction = 0
+            set(value) {
+                assert(direction in -1..1)
+                field = value
+            }
+        private var tacho = 0 // degrees rotated
+        private var lastUpdateTs = System.currentTimeMillis()
+
+        /** Update the tacho count when you read or change */
+        private fun updateTs() {
+            val currentTs = System.currentTimeMillis()
+            val ms = currentTs - lastUpdateTs
+            tacho += (speed * ms * 360.0).toInt()
+            lastUpdateTs = currentTs
+        }
+
+        override fun flt() {
+            stop()
+        }
+
+        override fun backward() {
+            updateTs()
+            direction = -1
+        }
+
+        override fun setPower(value: Int) {
+            updateTs()
+            assert(value in 0..100) { "Bad power: $value" }
+            power = value
+        }
+
+        override fun stop() {
+            updateTs()
+            direction = 0
+            assert(speed == 0.0)
+        }
+
+        override fun forward() {
+            updateTs()
+            direction = 1
+        }
+
+        override fun getPower(): Int = power
+
+        override fun isMoving(): Boolean = speed != 0.0
+
+        override fun resetTachoCount() {
+            tacho = 0
+        }
+
+        override fun getTachoCount(): Int {
+            updateTs()
+            return tacho
+        }
+    }
+
+    companion object {
+        private val LOG = KotlinLogging.logger {}
+        private const val SLOWDOWN = 0.0000001
+    }
+
+}

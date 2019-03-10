@@ -259,6 +259,14 @@
             <version>2.10.1</version>
         </dependency>
 
+        <!-- https://mvnrepository.com/artifact/org.jetbrains.kotlinx/kotlinx-coroutines-core -->
+        <dependency>
+            <groupId>org.jetbrains.kotlinx</groupId>
+            <artifactId>kotlinx-coroutines-core</artifactId>
+            <version>1.1.1</version>
+        </dependency>
+
+
         <!-- https://mvnrepository.com/artifact/javax.xml.bind/jaxb-api -->
         <!-- Fixing "java.lang.NoClassDefFoundError: javax/xml/bind/DatatypeConverter"-->
         <dependency>
