@@ -306,3 +306,23 @@ enum class VirtualPort {
     }
 
 }
+
+
+path.forEach { wbb.location = it }
+        // smile ssswwweeerrrffffffvvccccxxxssssssewwffvffffrrffeeessssxfesssxfeffffffccccxxxxss
+        println(wbb)
+        keyboardCommands.forEach { ch ->
+            println("$wbb [$ch] ")
+            val stepSize = 3
+            recording.add(ch)
+            when (ch) {
+                'w'
+                else -> LOG.warn { "Ignoring '$ch'" }
+            }
+            println(wbb)
+        }
+
+    private val db: Firestore = FirestoreOptions.newBuilder()
+            .setCredentials(GoogleCredentials.fromStream(
+                    ClassLoader.getSystemClassLoader().getResourceAsStream("serviceAccountKey.json")))
+            .build().service!!

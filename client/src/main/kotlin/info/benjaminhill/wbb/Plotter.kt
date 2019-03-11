@@ -1,14 +1,17 @@
 package info.benjaminhill.wbb
 
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import lejos.hardware.Battery
 import lejos.hardware.Button
 import lejos.hardware.lcd.LCD
 import lejos.hardware.motor.EV3LargeRegulatedMotor
 import lejos.hardware.port.MotorPort
+import lejos.robotics.BaseMotor
 import lejos.robotics.RegulatedMotor
 import lejos.robotics.geometry.Point2D
 import lejos.robotics.geometry.Rectangle2D
-import lejos.utility.Delay
 import mu.KotlinLogging
 
 /**
@@ -26,7 +29,8 @@ class Plotter(
 
     /** Assume tacho 0 means the pen is in the middle of the drawing area.  May need to move and reset to make it correct. */
     private val initialLengthCm = Math.sqrt(2 * (spoolDistanceCm / 2) * (spoolDistanceCm / 2))
-    private val safeDrawingArea = Rectangle2D.Double(spoolDistanceCm * 0.1, spoolDistanceCm * 0.1, spoolDistanceCm * 0.9, spoolDistanceCm * 0.9)
+
+    private val safeDrawingArea = Rectangle2D.Double(spoolDistanceCm * BUFFER, spoolDistanceCm * BUFFER, spoolDistanceCm * BUFFER, spoolDistanceCm * BUFFER)
 
     /** Degrees/Second */
     private val maxSpeed = Math.min(spool0.maxSpeed.toDouble(), 720.0).toInt()
@@ -39,52 +43,10 @@ class Plotter(
     }
 
     val spool0Length: Double
-        get() = initialLengthCm + (spool0.tachoCount / 360.0) * TECHNIC_AXLE_CIRCUMFERENCE_CM
+        get() = tachoToLength(spool0.tachoCount.toDouble())
 
     val spool1Length: Double
-        get() = initialLengthCm + (spool1.tachoCount / 360.0) * TECHNIC_AXLE_CIRCUMFERENCE_CM
-
-    /**
-     * @return if ok to continue
-     */
-    fun calibrate(): Boolean {
-        val adjustDegrees = 360 * 2
-        LOG.info { "Starting calibration: enter to finish, escape to quit." }
-        while (true) {
-            when (Button.waitForAnyPress()) {
-                Button.ID_ENTER -> {
-                    LOG.info { "Ending calibration" }
-                    return true
-                }
-                Button.ID_UP -> {
-                    LOG.info { "Calibrating UP" }
-                    spool0.rotate(-adjustDegrees)
-                    spool1.rotate(-adjustDegrees)
-                }
-                Button.ID_LEFT -> {
-                    LOG.info { "Calibrating LEFT" }
-                    spool0.rotate(-adjustDegrees)
-                    spool1.rotate(adjustDegrees)
-                }
-                Button.ID_RIGHT -> {
-                    LOG.info { "Calibrating RIGHT" }
-                    spool0.rotate(adjustDegrees)
-                    spool1.rotate(-adjustDegrees)
-                }
-                Button.ID_DOWN -> {
-                    LOG.info { "Calibrating DOWN" }
-                    spool0.rotate(adjustDegrees)
-                    spool1.rotate(adjustDegrees)
-                }
-                Button.ID_ESCAPE -> {
-                    LOG.warn { "Calibrating is bailing out before executing script." }
-                    return false
-                }
-            }
-            spool0.resetTachoCount()
-            spool1.resetTachoCount()
-        }
-    }
+        get() = tachoToLength(spool1.tachoCount.toDouble())
 
     /**
      * Required to be normalized 0..1 plotter location
@@ -118,26 +80,69 @@ class Plotter(
             val targetTacho1 = lengthToTacho(targetLength1)
             LOG.debug(" spool1:${spool1Length.str}->${targetLength1.str}, tachoD:$delta1 -> $targetTacho1")
 
+
+            // Reduce the speed of the SMALLER delta.  Don't do an else to avoid divide by zero
             spool0.speed = maxSpeed
             spool1.speed = maxSpeed
-            // Reduce the speed of the SMALLER delta.  Don't do an else to avoid divide by zero
             if (delta1 < delta0) {
                 spool1.speed = (maxSpeed * (delta1 / delta0)).toInt()
             }
             if (delta0 < delta1) {
                 spool0.speed = (maxSpeed * (delta0 / delta1)).toInt()
             }
+
             spool0.startSynchronization()
-            spool0.rotateTo(targetTacho0, false)
-            spool1.rotateTo(targetTacho1, false)
+            spool0.rotateTo(targetTacho0.toInt(), true)
+            spool1.rotateTo(targetTacho1.toInt(), true)
             spool0.endSynchronization()
-            // TODO: Better!
-            while (spool0.isMoving || spool1.isMoving) {
-                Delay.msDelay(100)
-            }
+            waitForMoveToEnd(spool0, spool1)
         }
 
-    private fun lengthToTacho(targetLength: Double): Int = (360.0 * (targetLength - initialLengthCm) / TECHNIC_AXLE_CIRCUMFERENCE_CM).toInt()
+
+    private fun lengthToTacho(len: Double): Double = 360.0 * (len - initialLengthCm) / TECHNIC_AXLE_CIRCUMFERENCE_CM
+    private fun tachoToLength(tacho: Double): Double = initialLengthCm + (tacho / 360.0) * TECHNIC_AXLE_CIRCUMFERENCE_CM // TODO: Thread thickness matters
+
+    /**
+     * @return OK to continue
+     */
+    fun calibrate(): Boolean {
+        val adjustDegrees = 360 * 2
+        LOG.info { "Starting calibration: enter to finish, escape to quit." }
+        while (true) {
+            when (Button.waitForAnyPress()) {
+                Button.ID_ENTER -> {
+                    LOG.info { "Calibrating:ENTER" }
+                    return true
+                }
+                Button.ID_UP -> {
+                    LOG.info { "Calibrating:UP" }
+                    spool0.rotate(-adjustDegrees, true)
+                    spool1.rotate(-adjustDegrees, true)
+                }
+                Button.ID_LEFT -> {
+                    LOG.info { "Calibrating:LEFT" }
+                    spool0.rotate(-adjustDegrees, true)
+                    spool1.rotate(adjustDegrees, true)
+                }
+                Button.ID_RIGHT -> {
+                    LOG.info { "Calibrating:RIGHT" }
+                    spool0.rotate(adjustDegrees, true)
+                    spool1.rotate(-adjustDegrees, true)
+                }
+                Button.ID_DOWN -> {
+                    LOG.info { "Calibrating:DOWN" }
+                    spool0.rotate(adjustDegrees, true)
+                    spool1.rotate(adjustDegrees, true)
+                }
+                Button.ID_ESCAPE -> {
+                    LOG.warn { "Calibrating:ESCAPE" }
+                    return false
+                }
+            }
+            spool0.resetTachoCount()
+            spool1.resetTachoCount()
+        }
+    }
 
     override fun close() {
         LOG.info { "Closing normally." }
@@ -159,8 +164,8 @@ class Plotter(
 
     companion object {
         private val LOG = KotlinLogging.logger {}
-        const val TECHNIC_AXLE_CIRCUMFERENCE_CM = (2 * Math.PI * 2.5) / 10
-
+        private const val TECHNIC_AXLE_CIRCUMFERENCE_CM = (2 * Math.PI * 2.5) / 10
+        private const val BUFFER = 0.15
         /**
          * @link https://www.marginallyclever.com/2012/02/drawbot-overview/ for diagram
          */
@@ -181,6 +186,12 @@ class Plotter(
             val y = Math.sqrt(s * (s - sideA) * (s - sideB) * (s - sideC)) / (0.5 * sideA)
             val x = Math.sqrt(sideB * sideB - y * y)
             return Point2D.Double(x, y)
+        }
+
+        fun waitForMoveToEnd(vararg motors: BaseMotor) = runBlocking(Dispatchers.Default) {
+            while (motors.any { it.isMoving }) {
+                delay(5) // or better to try { Thread.sleep(5) } catch (ie: InterruptedException) { }
+            }
         }
     }
 

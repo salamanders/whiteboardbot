@@ -47,6 +47,23 @@ class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
 
     override fun run() = runBlocking {
         while (plotter.calibrate()) {
+            // Frame the drawing area
+            plotter.location = Point2D.Double(0.0, 0.0)
+
+            plotter.location = Point2D.Double(0.5, 0.0)
+            plotter.location = Point2D.Double(1.0, 0.0)
+
+            plotter.location = Point2D.Double(1.0, 0.5)
+            plotter.location = Point2D.Double(1.0, 1.0)
+
+            plotter.location = Point2D.Double(0.5, 1.0)
+            plotter.location = Point2D.Double(0.0, 1.0)
+
+            plotter.location = Point2D.Double(0.0, 0.5)
+            plotter.location = Point2D.Double(0.0, 0.0)
+
+            plotter.location = Point2D.Double(0.5, 0.5)
+
             config.get("script")?.asString?.let {
                 runScript(it)
             }
