@@ -1,6 +1,9 @@
-package info.benjaminhill.wbb
+package info.benjaminhill.wbb.content
+
+import info.benjaminhill.wbb.str
 
 fun main() {
+
     var pctScale = 1.0
 
     for (circle in 1..20) {
@@ -12,5 +15,5 @@ fun main() {
         }
     }
 
-
 }
+

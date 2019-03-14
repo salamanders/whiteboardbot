@@ -1,5 +1,9 @@
 
 
+
+
+
+
 Couldn't run firestore on the Ev3:
 Error: Could not find TLS ALPN provider; no working netty-tcnative, Conscrypt, or Jetty NPN/ALPN available -->
 https://mvnrepository.com/artifact/org.eclipse.jetty.alpn/alpn-api -->
@@ -41,7 +45,7 @@ private val updateFromCloudListener: ListenerRegistration = docRef.addSnapshotLi
     try {
         e?.let { throw IllegalStateException(e) }
         snapshot?.data?.filter { (key, value) ->
-            LOG.info("Acting on: '$key':'$value'")
+            LOG.info { "Acting on: '$key':'$value'" }
             key != null && value != null && !key.isBlank() && !value.toString().isBlank()
         }?.forEach { (key, value) ->
             when (key) {
@@ -94,7 +98,7 @@ class Spool(private val motor: EncoderMotor, private val initialStringLengthCm: 
         motor.stop()
         motor.resetTachoCount()
         msPerCmFullPower = calcMsPerCmFullPower()
-        LOG.info("Spool:init (tacho:${motor.tachoCount}, msPerCmFullPower:${msPerCmFullPower.str}, length:${length.str}, axelcm:${AXLE_CIRCUMFERENCE_CM.str}")
+        LOG.info { "Spool:init (tacho:${motor.tachoCount}, msPerCmFullPower:${msPerCmFullPower.str}, length:${length.str}, axelcm:${AXLE_CIRCUMFERENCE_CM.str}" }
     }
 
     /** Spin for 1 second at max power and see how far you travel */
@@ -183,7 +187,7 @@ class Spool(private val motor: EncoderMotor, private val initialStringLengthCm: 
         }
 
     override fun close() {
-        LOG.info("Motor stopping and closing port")
+        LOG.info { "Motor stopping and closing port" }
         try {
             motor.stop()
             if (motor is Closeable) {
@@ -326,3 +330,11 @@ path.forEach { wbb.location = it }
             .setCredentials(GoogleCredentials.fromStream(
                     ClassLoader.getSystemClassLoader().getResourceAsStream("serviceAccountKey.json")))
             .build().service!!
+
+
+
+fun BaseMotor.waitForMoveToEnd() = runBlocking(Dispatchers.Default) {
+    while (isMoving) {
+        delay(5)
+    }
+}

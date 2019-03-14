@@ -1,73 +1,51 @@
 package info.benjaminhill.wbb
 
-import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.*
-import lejos.hardware.Battery
 import lejos.robotics.geometry.Point2D
 import mu.KotlinLogging
 import java.net.URL
 import java.util.*
 import kotlin.coroutines.CoroutineContext
 
-
 class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
 
     private val job = Job()
     override val coroutineContext: CoroutineContext get() = job + Dispatchers.Default
 
-    private val config: JsonObject = JsonParser().parse(URL("https://whiteboardbot.firebaseapp.com/config.json").readText()).asJsonObject.getAsJsonObject("wbb").getAsJsonObject("board01")!!.also {
-        LOG.debug { "RC config from web: $it" }
-    }
-    private val spoolDistanceCm = config.get("spoolDistanceCm").asDouble.also {
-        LOG.info { "config.spoolDistanceCm:$it" }
-    }
-    private val plotter = Plotter(spoolDistanceCm).also {
-        LOG.info { "RC created plotter" }
-    }
-
-    private val mqtt = MQTT()
-
-    init {
-        LOG.info { "Launching 60 second telemetry" }
-        launch {
-            while (job.isActive) {
-                val (x, y) = plotter.location
-                mqtt.sendTelemetry(mapOf(
-                        "voltage" to Battery.getVoltageMilliVolt(),
-                        "x" to x,
-                        "y" to y,
-                        "spool0" to plotter.spool0Length,
-                        "spool1" to plotter.spool1Length
-                ))
-                delay(60 * 1_000)
-            }
+    private val config = async(coroutineContext) {
+        JsonParser().parse(URL("https://whiteboardbot.firebaseapp.com/config.json").readText()).asJsonObject.getAsJsonObject("wbb").getAsJsonObject("board01")!!.also {
+            LOG.debug { "Web config loaded." }
         }
+    }
+
+    private val plotter = Plotter().also {
+        LOG.debug { "Created Plotter" }
     }
 
     override fun run() = runBlocking {
-        while (plotter.calibrate()) {
-            // Frame the drawing area
-            plotter.location = Point2D.Double(0.0, 0.0)
+        LOG.info { "Framing drawing area" }
+        // Frame the drawing area
+        plotter.location = Point2D.Double(0.0, 0.0)
 
-            plotter.location = Point2D.Double(0.5, 0.0)
-            plotter.location = Point2D.Double(1.0, 0.0)
+        plotter.location = Point2D.Double(0.5, 0.0)
+        plotter.location = Point2D.Double(1.0, 0.0)
 
-            plotter.location = Point2D.Double(1.0, 0.5)
-            plotter.location = Point2D.Double(1.0, 1.0)
+        plotter.location = Point2D.Double(1.0, 0.5)
+        plotter.location = Point2D.Double(1.0, 1.0)
 
-            plotter.location = Point2D.Double(0.5, 1.0)
-            plotter.location = Point2D.Double(0.0, 1.0)
+        plotter.location = Point2D.Double(0.5, 1.0)
+        plotter.location = Point2D.Double(0.0, 1.0)
 
-            plotter.location = Point2D.Double(0.0, 0.5)
-            plotter.location = Point2D.Double(0.0, 0.0)
+        plotter.location = Point2D.Double(0.0, 0.5)
+        plotter.location = Point2D.Double(0.0, 0.0)
 
-            plotter.location = Point2D.Double(0.5, 0.5)
+        LOG.info { "Finished frame, rendering script" }
 
-            config.get("script")?.asString?.let {
-                runScript(it)
-            }
+        config.await().get("script")?.asString?.let {
+            runScript(it)
         }
+        Unit
     }
 
     private fun runScript(script: String) {
@@ -81,16 +59,19 @@ class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
                 }
             }
         }
-        LOG.info("RC plotting ${path.size} points.")
+        LOG.info { "RC plotting ${path.size} points." }
         path.forEachIndexed { idx, point ->
-            LOG.info { "Script $idx: ${point.str}" }
             plotter.location = Point2D.Double(point.x, point.y)
+            if (idx % 100 == 0) {
+                LOG.info { "Step $idx (${(idx * 100) / path.size}%)" }
+            }
+
         }
     }
 
     override fun close() {
-        LOG.info { "RC close()" }
-        mqtt.close()
+        LOG.debug { "RC close()" }
+        // mqtt.close()
         plotter.close()
         job.cancel()
     }
@@ -98,5 +79,5 @@ class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
     companion object {
         private val LOG = KotlinLogging.logger {}
     }
-
 }
+

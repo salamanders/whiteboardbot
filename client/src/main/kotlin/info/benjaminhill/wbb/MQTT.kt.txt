@@ -14,13 +14,33 @@ import java.security.spec.PKCS8EncodedKeySpec
 
 /**
  * https://console.cloud.google.com/iot/locations/us-central1/registries/wbb-registry/devices/ev3?project=whiteboardbot
+ *
+    private val mqtt = MQTT().also {
+    LOG.debug { "Conning MQTT" }
+    it.connect()
+
+    LOG.debug { "Launching 60 second telemetry" }
+    launch {
+    while (job.isActive) {
+    val (x, y) = plotter.location
+    it.sendTelemetry(mapOf(
+    "voltage" to Battery.getVoltageMilliVolt(),
+    "x" to x,
+    "y" to y,
+    "spool0" to plotter.spool0.length,
+    "spool1" to plotter.spool1.length
+    ))
+    delay(60 * 1_000)
+    }
+    }
+    }
  */
 class MQTT : AutoCloseable {
 
-    private val client: MqttClient
+    private lateinit var client: MqttClient
 
-    init {
-        LOG.info { "MQTT:init:start" }
+    fun connect() {
+        LOG.debug { "MQTT:init:start" }
 
         client = connectWithExponentialRetry(MqttClient("ssl://$BRIDGE_HOST_NAME:$BRIDGE_PORT",
                 CLIENT_ID,
@@ -38,7 +58,7 @@ class MQTT : AutoCloseable {
 
         if (client.isConnected) {
             client.subscribe(TOPIC)
-            LOG.info { "Subscribing success." }
+            LOG.debug { "Subscribing success." }
         } else {
             LOG.warn { "MQTT Client was unable to connect, skipped send and receive" }
         }
@@ -53,38 +73,9 @@ class MQTT : AutoCloseable {
         }
         // https://cloud.google.com/iot/docs/how-tos/commands#iot-core-send-command-nodejs
         // `gcloud iot devices describe $DEVICE_ID --project=$GCP_PROJECT_ID --region=$GCP_REGION  --registry=$REGISTRY_NAME`
-        val payload = GSON.toJson(data)!!
-        val message = MqttMessage(payload.toByteArray())
+        val message = MqttMessage(GSON.toJson(data)!!.toByteArray())
         message.qos = 1
         client.publish("/devices/$DEVICE_ID/events", message)
-    }
-
-    private fun connectWithExponentialRetry(client: MqttClient): MqttClient {
-        // GCP Requirements
-        val connectOptions = MqttConnectOptions()
-        connectOptions.mqttVersion = MqttConnectOptions.MQTT_VERSION_3_1_1
-        connectOptions.userName = "notused"
-        connectOptions.password = createJwtRsa().toCharArray()
-
-        exponentialRetryDelayMs().forEach { retryIntervalMs ->
-            try {
-                client.connect(connectOptions)
-                return client
-            } catch (e: MqttException) {
-                when (e.reasonCode) {
-                    REASON_CODE_CONNECTION_LOST.toInt(),
-                    REASON_CODE_SERVER_CONNECT_ERROR.toInt() -> {
-                        Thread.sleep(retryIntervalMs)
-                        LOG.debug { "Exponential backoff $retryIntervalMs" }
-                    }
-                    else -> {
-                        LOG.warn("Unknown MQTT connection issue (not retrying): $e")
-                        return client
-                    }
-                }
-            }
-        }
-        return client
     }
 
     override fun close() {
@@ -92,19 +83,6 @@ class MQTT : AutoCloseable {
             client.disconnect()
         }
         client.close()
-    }
-
-    private fun createJwtRsa(): String {
-        val now = DateTime()
-        // openssl pkcs8 -topk8 -nocrypt -in rsa_private.pem -outform der -out rsa_private.der
-        val privateKey = javaClass.classLoader.getResource("rsa_private.der")!!.readBytes()
-        val jwtBuilder = Jwts.builder()
-                .setIssuedAt(now.toDate())
-                .setExpiration(now.plusDays(1).toDate())
-                .setAudience("whiteboardbot")
-        val spec = PKCS8EncodedKeySpec(privateKey)
-        val kf = KeyFactory.getInstance("RSA")
-        return jwtBuilder.signWith(SignatureAlgorithm.RS256, kf.generatePrivate(spec)).compact()
     }
 
     companion object {
@@ -125,6 +103,47 @@ class MQTT : AutoCloseable {
         private const val CLIENT_ID = "projects/$GCP_PROJECT_ID/locations/$GCP_REGION/registries/$REGISTRY_NAME/devices/$DEVICE_ID"
 
         private val GSON = Gson()
+
+        private fun connectWithExponentialRetry(client: MqttClient): MqttClient {
+            // GCP Requirements
+            val connectOptions = MqttConnectOptions()
+            connectOptions.mqttVersion = MqttConnectOptions.MQTT_VERSION_3_1_1
+            connectOptions.userName = "notused"
+            connectOptions.password = createJwtRsa().toCharArray()
+
+            exponentialRetryDelayMs().forEach { retryIntervalMs ->
+                try {
+                    client.connect(connectOptions)
+                    return client
+                } catch (e: MqttException) {
+                    when (e.reasonCode) {
+                        REASON_CODE_CONNECTION_LOST.toInt(),
+                        REASON_CODE_SERVER_CONNECT_ERROR.toInt() -> {
+                            Thread.sleep(retryIntervalMs)
+                            LOG.debug { "Exponential backoff $retryIntervalMs" }
+                        }
+                        else -> {
+                            LOG.warn { "Unknown MQTT connection issue (not retrying): $e" }
+                            return client
+                        }
+                    }
+                }
+            }
+            return client
+        }
+
+        private fun createJwtRsa(): String {
+            val now = DateTime()
+            // openssl pkcs8 -topk8 -nocrypt -in rsa_private.pem -outform der -out rsa_private.der
+            val privateKey = javaClass.classLoader.getResource("rsa_private.der")!!.readBytes()
+            val jwtBuilder = Jwts.builder()
+                    .setIssuedAt(now.toDate())
+                    .setExpiration(now.plusDays(1).toDate())
+                    .setAudience("whiteboardbot")
+            val spec = PKCS8EncodedKeySpec(privateKey)
+            val kf = KeyFactory.getInstance("RSA")
+            return jwtBuilder.signWith(SignatureAlgorithm.RS256, kf.generatePrivate(spec)).compact()
+        }
     }
 }
 

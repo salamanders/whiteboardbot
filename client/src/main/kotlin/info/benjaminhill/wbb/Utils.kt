@@ -3,6 +3,10 @@ package info.benjaminhill.wbb
 import lejos.robotics.geometry.Point2D
 import org.w3c.dom.Element
 import java.io.File
+import java.net.DatagramPacket
+import java.net.DatagramSocket
+import java.net.NetworkInterface
+import java.net.SocketTimeoutException
 import java.util.*
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.random.Random
@@ -13,10 +17,17 @@ val Double.str: String
     get() = "%.3f".format(this)
 
 val Point2D.Double.str
-    get() = "{x:${this.x.str}, y:${this.y.str}"
+    get() = "{\"x\":${this.x.str}, \"y\":${this.y.str}}"
 
 operator fun Point2D.Double.component1(): Double = this.x
 operator fun Point2D.Double.component2(): Double = this.y
+
+val <T : Number> Pair<T, T>.x
+    get() = this.first
+
+val <T : Number> Pair<T, T>.y
+    get() = this.second
+
 
 /** Simple REPL keys to commands that always have 'q' to quit */
 fun keyboardCommands() = sequence {
@@ -72,5 +83,39 @@ fun exponentialRetryDelayMs(): Sequence<Long> {
 /** For when you need a temp ID for the duration of an app run */
 val sessionId by lazy {
     "23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ".toList().shuffled().take(4).joinToString()
+}
+
+/** Finds the first brick on the LAN */
+fun getBrickIPAddress(): String? {
+    val maxDiscoveryTimeMs = 2000
+    val maxPacketSize = 32
+    val discoveryPort = 3016
+
+    DatagramSocket().use { socket ->
+        socket.broadcast = true
+        NetworkInterface.getNetworkInterfaces().toList().filterNotNull().filterNot { it.isLoopback }.filter { it.isUp }
+                .flatMap { it.interfaceAddresses }.filterNotNull().forEach { interfaceAddress ->
+                    interfaceAddress.broadcast?.let { broadcast ->
+                        val message = "find * ${interfaceAddress.address.hostAddress} ${socket.localPort} 2"
+                        val sendData = message.toByteArray()
+                        val sendPacket = DatagramPacket(sendData, sendData.size, broadcast, discoveryPort)
+                        socket.send(sendPacket)
+                    }
+                }
+
+        socket.soTimeout = maxDiscoveryTimeMs / 4
+        val packet = DatagramPacket(ByteArray(maxPacketSize), maxPacketSize)
+        val start = System.currentTimeMillis()
+        while (System.currentTimeMillis() - start < maxDiscoveryTimeMs) {
+            try {
+                socket.receive(packet)
+                // val message = String(packet.data, Charset.defaultCharset()).trim { it <= ' ' }
+                return packet.address.hostAddress
+            } catch (e: SocketTimeoutException) {
+                LOG.warn { "No brick found." }
+            }
+        }
+    }
+    return null
 }
 

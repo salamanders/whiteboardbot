@@ -4,26 +4,20 @@ package info.benjaminhill.wbb
  * @author Benjamin Hill benjaminhill@gmail.com
  */
 
-import lejos.hardware.BrickFinder
-import lejos.hardware.Button
 import mu.KotlinLogging
 
-private val LOG = KotlinLogging.logger {}
+val LOG = KotlinLogging.logger {}
 
 fun main() {
-    LOG.info("main(): debug:${LOG.isDebugEnabled}")
-    BrickFinder.discover()?.filterNotNull()?.forEach {
-        LOG.info { "BrickInfo: ${it.name} ${it.type} ${it.ipAddress}" }
-    }
-
+    LOG.info { "main(): debug:${LOG.isDebugEnabled}" }
+    println(getBrickIPAddress())
 
     RemoteControl().use {
         it.run()
-        LOG.info { "Done with RemoteControl scripts, press any button to exit" }
-        Button.waitForAnyPress()
+        println("Finished Script")
     }
-    LOG.warn { "Exiting app normally." }
-}
 
+    LOG.info { "Exiting app normally." }
+}
 
 
