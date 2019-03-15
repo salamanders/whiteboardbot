@@ -19,15 +19,21 @@ val Double.str: String
 val Point2D.Double.str
     get() = "{\"x\":${this.x.str}, \"y\":${this.y.str}}"
 
+fun Point2D.Double.checkNormal() {
+    check(x > -0.1) { "non normal point: $str" }
+    check(x < 1.1) { "non normal point: $str" }
+    check(y > -0.1) { "non normal point: $str" }
+    check(y < 1.1) { "non normal point: $str" }
+}
+
+val lejos.robotics.geometry.Point.str
+    get() = "{\"x\":${this.x}, \"y\":${this.y}}"
+
+val java.awt.Point.str
+    get() = "{\"x\":${this.x}, \"y\":${this.y}}"
+
 operator fun Point2D.Double.component1(): Double = this.x
 operator fun Point2D.Double.component2(): Double = this.y
-
-val <T : Number> Pair<T, T>.x
-    get() = this.first
-
-val <T : Number> Pair<T, T>.y
-    get() = this.second
-
 
 /** Simple REPL keys to commands that always have 'q' to quit */
 fun keyboardCommands() = sequence {

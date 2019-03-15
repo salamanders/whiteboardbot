@@ -15,25 +15,25 @@ import java.security.spec.PKCS8EncodedKeySpec
 /**
  * https://console.cloud.google.com/iot/locations/us-central1/registries/wbb-registry/devices/ev3?project=whiteboardbot
  *
-    private val mqtt = MQTT().also {
-    LOG.debug { "Conning MQTT" }
-    it.connect()
+private val mqtt = MQTT().also {
+LOG.debug { "Conning MQTT" }
+it.connect()
 
-    LOG.debug { "Launching 60 second telemetry" }
-    launch {
-    while (job.isActive) {
-    val (x, y) = plotter.location
-    it.sendTelemetry(mapOf(
-    "voltage" to Battery.getVoltageMilliVolt(),
-    "x" to x,
-    "y" to y,
-    "spool0" to plotter.spool0.length,
-    "spool1" to plotter.spool1.length
-    ))
-    delay(60 * 1_000)
-    }
-    }
-    }
+LOG.debug { "Launching 60 second telemetry" }
+launch {
+while (job.isActive) {
+val (x, y) = plotter.location
+it.sendTelemetry(mapOf(
+"voltage" to Battery.getVoltageMilliVolt(),
+"x" to x,
+"y" to y,
+"spool0" to plotter.spool0.length,
+"spool1" to plotter.spool1.length
+))
+delay(60 * 1_000)
+}
+}
+}
  */
 class MQTT : AutoCloseable {
 

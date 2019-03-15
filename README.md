@@ -24,36 +24,12 @@ Firestore:
 
 ## Reference
 
-To SSH into the robot:
-
-    ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 root@192.168.86.250
-    root@EV3:/home/lejos/programs# jrun -cp whiteboardbot-0.0.1-SNAPSHOT-jar-with-dependencies.jar info.benjaminhill.wbb.MainKt
-
-Copying files
-
-    scp -oKexAlgorithms=+diffie-hellman-group1-sha1 ./alpn-boot-8.1.13.v20181017.jar  root@192.168.86.250:/home/root/lejos/lib/
-
-To view console Run ev3console or Eclipse: ev3control
-http://www.lejos.org/ev3/docs/
 
 Dev Env Setup
     
     gcloud components update && gcloud components install beta
     npm install -g firebase-tools
 
-To recreate the runtime
-
-
-    # Download from http://www.oracle.com/technetwork/java/embedded/downloads/java-embedded-java-se-download-359230.html
-    # NOTE: The "-g" is from [stack overflow](https://stackoverflow.com/questions/23275519/jdwp-in-embedded-jre-in-java-8)
-    gunzip ejdk-8-fcs-b132-linux-arm-sflt-03_mar_2014.tar.gz
-    tar xvf ejdk-8-fcs-b132-linux-arm-sflt-03_mar_2014.tar
-    cd ejdk1.8.0/bin
-    export JAVA_HOME=/usr
-    ./jrecreate.sh -g --dest ../../ejre-8u1-linux-arm-15_may_2015 --profile compact2 --vm client
-    cd ../..
-    tar cvf ejre-8u1-linux-arm-15_may_2015.tar ejre-8u1-linux-arm-15_may_2015
-    gzip ejre-8u1-linux-arm-15_may_2015.tar
 
 
 ## Thanks To

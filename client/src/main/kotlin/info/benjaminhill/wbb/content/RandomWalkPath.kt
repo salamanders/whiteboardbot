@@ -1,8 +1,8 @@
 package info.benjaminhill.wbb.content
 
+import info.benjaminhill.wbb.checkNormal
 import info.benjaminhill.wbb.str
-import info.benjaminhill.wbb.x
-import info.benjaminhill.wbb.y
+import lejos.robotics.geometry.Point2D
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Point
@@ -12,8 +12,8 @@ import java.io.File
 import java.util.concurrent.ThreadLocalRandom
 import javax.imageio.ImageIO
 
-const val STROKES = 1_500
-const val MAX_HOP = 0.2
+const val STROKES = 800
+const val MAX_HOP = 0.3
 const val WHITEOUT_WIDTH = 2f
 
 /**
@@ -23,16 +23,17 @@ const val WHITEOUT_WIDTH = 2f
 fun main() {
     val realPoints = mutableListOf<Point>()
 
-    val inputImage = ImageIO.read(ClassLoader.getSystemResource("sundar_edge.png")!!)!!
+    val inputImage = ImageIO.read(ClassLoader.getSystemResource("xwing2.png")!!)!!
 
     // Gradually white-out the input to avoid revisiting completed areas
     val inputG2d = inputImage.createGraphics()!!.apply {
         setRenderingHint(
                 RenderingHints.KEY_ANTIALIASING,
                 RenderingHints.VALUE_ANTIALIAS_ON)
-        color = Color(1f, 1f, 1f, .7f) // Higher alpha = more opaque
+        color = Color(1f, 1f, 1f, .9f) // Higher alpha = more opaque
         stroke = BasicStroke(WHITEOUT_WIDTH)
     }
+    val startingLum = inputImage.getAverageLum()
 
     val outputImage = BufferedImage(inputImage.width, inputImage.height, BufferedImage.TYPE_USHORT_GRAY)
     val outputG2d = outputImage.createGraphics()!!.apply {
@@ -45,11 +46,12 @@ fun main() {
         stroke = BasicStroke(1f)
     }
 
+    realPoints.add(Point(inputImage.width / 2, inputImage.height / 2))
     // Reset to start anywhere in entire image 1 hop from center
-    realPoints.add(inputImage.getDarkestNear(Point(inputImage.width / 2, inputImage.height / 2), 9_000))
+    // realPoints.add(inputImage.getDarkestNear(Point(inputImage.width / 2, inputImage.height / 2), 10_000))
 
     for (i in 0..STROKES) {
-        val nextLoc = inputImage.getDarkestNear(realPoints.last(), 3_000)
+        val nextLoc = inputImage.getDarkestNear(realPoints.last(), 4_000)
         inputG2d.drawLine(realPoints.last().x, realPoints.last().y, nextLoc.x, nextLoc.y)
         outputG2d.drawLine(realPoints.last().x, realPoints.last().y, nextLoc.x, nextLoc.y)
         realPoints.add(nextLoc)
@@ -61,13 +63,18 @@ fun main() {
     ImageIO.write(outputImage, "png", File("output.png"))
     ImageIO.write(inputImage, "png", File("input_scribbled.png"))
 
+    val endingLum = inputImage.getAverageLum()
+    val pctGainLum = (endingLum - startingLum) / (1.0 - startingLum)
+
+    println("Score: ${(pctGainLum * 100).toInt()}%")
+
     val maxX = realPoints.maxBy { it.x }!!.x.toDouble()
     val maxY = realPoints.maxBy { it.y }!!.y.toDouble()
     val scale = Math.min(1 / maxX, 1 / maxY)
-    realPoints.map {
-        Pair(it.x * scale, it.y * scale)
-    }.forEach {
-        print("${it.x.str},${it.y.str}\\n")
+    realPoints.forEach {
+        val pt = Point2D.Double(it.x * scale, it.y * scale)
+        pt.checkNormal()
+        println("{\"x\":${pt.x.str},\"y\":${pt.y.str}},")
     }
 
 }
@@ -78,6 +85,16 @@ fun BufferedImage.getLum(loc: Point): Float {
     val green = color.ushr(8) and 0xFF
     val blue = color.ushr(0) and 0xFF
     return (red * 0.2126f + green * 0.7152f + blue * 0.0722f) / 255
+}
+
+fun BufferedImage.getAverageLum(): Double {
+    var totalLum = 0.0
+    for (x in 0 until width) {
+        for (y in 0 until height) {
+            totalLum += getLum(Point(x, y))
+        }
+    }
+    return totalLum / (width * height)
 }
 
 
@@ -92,33 +109,40 @@ fun Point.getPointsAlongLine(other: Point): List<Point> {
     }
 }
 
-/** Samples along a line to see what potential next move would wipe out the most darkness */
+/** Fixed size step */
+fun circularFixedSteps(origin: Point): List<Point> = (0..360).map {
+    Math.toRadians(it.toDouble())
+}.map {
+    Point(
+            origin.x + (Math.cos(it) * 5).toInt(),
+            origin.y + (Math.sin(it) * 5).toInt()
+    )
+}
+
+fun randomGaussianSteps(origin: Point, searchSize: Int, maxHop: Double) = (0..searchSize).map {
+    Point(
+            (ThreadLocalRandom.current().nextGaussian() * maxHop).toInt() + origin.x,
+            (ThreadLocalRandom.current().nextGaussian() * maxHop).toInt() + origin.y
+    )
+}
+
+
+/**
+ * Given the generators's steps,
+ * samples along a line to see what potential next move would wipe out the most darkness
+ */
 fun BufferedImage.getDarkestNear(
         origin: Point,
         searchSize: Int
-): Point {
-    var darkestLum = Float.MAX_VALUE
-    var darkestLoc = origin
-
-    for (i in 0..searchSize) {
-        val nextLoc = Point(
-                (ThreadLocalRandom.current().nextGaussian() * (width * MAX_HOP)).toInt() + origin.x,
-                (ThreadLocalRandom.current().nextGaussian() * (height * MAX_HOP)).toInt() + origin.y
-        )
-
-        // out of bounds
-        if (nextLoc.x !in 0 until width || nextLoc.y !in 0 until height) {
-            continue
-        }
-
-        val averageLum = origin.getPointsAlongLine(nextLoc).map {
-            getLum(it)
-        }.average().toFloat()
-
-        if (averageLum < darkestLum) {
-            darkestLum = averageLum
-            darkestLoc = nextLoc
-        }
-    }
-    return darkestLoc
-}
+): Point =
+        randomGaussianSteps(origin, searchSize, width * MAX_HOP)
+                //circularFixedSteps(origin)
+                .filter {
+                    // Reject if out of bounds
+                    it.x in 0 until width && it.y in 0 until height
+                }.map { nextLoc ->
+                    nextLoc to origin.getPointsAlongLine(nextLoc).map { pointAlongLine ->
+                        val lum = getLum(pointAlongLine)
+                        lum * lum // 0.99660
+                    }.average().toFloat()
+                }.minBy { it.second }!!.first

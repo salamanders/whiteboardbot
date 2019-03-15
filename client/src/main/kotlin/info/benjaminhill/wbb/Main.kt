@@ -10,7 +10,6 @@ val LOG = KotlinLogging.logger {}
 
 fun main() {
     LOG.info { "main(): debug:${LOG.isDebugEnabled}" }
-    println(getBrickIPAddress())
 
     RemoteControl().use {
         it.run()
@@ -19,5 +18,6 @@ fun main() {
 
     LOG.info { "Exiting app normally." }
 }
+
 
 
