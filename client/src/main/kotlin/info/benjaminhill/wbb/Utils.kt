@@ -11,9 +11,12 @@ import java.util.*
 import javax.xml.parsers.DocumentBuilderFactory
 import kotlin.random.Random
 
-
 /** Shorter round for the logs */
 val Double.str: String
+    get() = "%.3f".format(this)
+
+/** Shorter round for the logs */
+val Float.str: String
     get() = "%.3f".format(this)
 
 val Point2D.Double.str

@@ -1,20 +1,25 @@
 package info.benjaminhill.wbb
 
+import com.google.gson.Gson
 import com.google.gson.JsonParser
+import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
 import lejos.robotics.geometry.Point2D
 import mu.KotlinLogging
 import java.net.URL
 import kotlin.coroutines.CoroutineContext
 
+
 class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
 
     private val job = Job()
     override val coroutineContext: CoroutineContext get() = job + Dispatchers.Default
 
-    private val config = async(coroutineContext) {
-        JsonParser().parse(URL("https://whiteboardbot.firebaseapp.com/script.json").readText()).asJsonObject.getAsJsonObject("wbb").getAsJsonObject("board01")!!.also {
-            LOG.debug { "Web script loaded." }
+    private val script = async(coroutineContext) {
+        val config = JsonParser().parse(URL("https://whiteboardbot.firebaseapp.com/config.json").readText()).asJsonObject!!
+        val listOfPointsType = object : TypeToken<List<Point2D.Double>>() {}.type!!
+        Gson().fromJson<List<Point2D.Double>>(config.getAsJsonArray("script"), listOfPointsType)!!.also {
+            LOG.debug { "Web script loaded: ${it.size}" }
         }
     }
 
@@ -25,20 +30,14 @@ class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
     override fun run() = runBlocking {
         LOG.info { "FRAME:START" }
         // Frame the drawing area
-        plotter.location = Point2D.Double(0.001, 0.001)
-        plotter.location = Point2D.Double(0.999, 0.001)
-        plotter.location = Point2D.Double(0.999, 0.999)
-        plotter.location = Point2D.Double(0.001, 0.999)
-        plotter.location = Point2D.Double(0.001, 0.001)
+        plotter.location = Point2D.Double(0.0, 0.0)
+        plotter.location = Point2D.Double(1.0, 0.0)
+        plotter.location = Point2D.Double(1.0, 1.0)
+        plotter.location = Point2D.Double(0.0, 1.0)
+        plotter.location = Point2D.Double(0.0, 0.0)
         LOG.info { "FRAME:END" }
 
-        val points = config.await().get("script")!!.asJsonArray!!.filterNotNull().map {
-            Point2D.Double(
-                    it.asJsonObject.get("x").asDouble,
-                    it.asJsonObject.get("y").asDouble
-            )
-        }
-        runScript(points)
+        runScript(script.await())
         Unit
     }
 
@@ -49,7 +48,6 @@ class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
             if (idx % 100 == 0) {
                 LOG.info { "Script Step $idx (${(idx * 100) / path.size}%)" }
             }
-
         }
     }
 

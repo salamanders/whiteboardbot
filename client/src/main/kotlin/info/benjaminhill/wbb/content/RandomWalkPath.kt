@@ -12,8 +12,8 @@ import java.io.File
 import java.util.concurrent.ThreadLocalRandom
 import javax.imageio.ImageIO
 
-const val STROKES = 800
-const val MAX_HOP = 0.3
+const val STROKES = 1200
+const val MAX_HOP = 0.4
 const val WHITEOUT_WIDTH = 2f
 
 /**
@@ -23,7 +23,7 @@ const val WHITEOUT_WIDTH = 2f
 fun main() {
     val realPoints = mutableListOf<Point>()
 
-    val inputImage = ImageIO.read(ClassLoader.getSystemResource("xwing2.png")!!)!!
+    val inputImage = ImageIO.read(File("seth.png"))!!
 
     // Gradually white-out the input to avoid revisiting completed areas
     val inputG2d = inputImage.createGraphics()!!.apply {

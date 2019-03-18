@@ -5,37 +5,14 @@ import lejos.hardware.Button
 import lejos.hardware.lcd.LCD
 import lejos.hardware.motor.EV3LargeRegulatedMotor
 import lejos.hardware.port.MotorPort
-import lejos.robotics.RegulatedMotor
 import lejos.robotics.geometry.Point2D
 import mu.KotlinLogging
-
-/** How many MS to reach a target at max speed */
-fun RegulatedMotor.eta(targetTachoCount: Int) = (Math.abs(targetTachoCount - tachoCount) / maxSpeed)
-
-/** To aim for the target goalMs, may move slower than max speed */
-fun RegulatedMotor.rotateSlowlyTo(targetTachoCount: Int, goalMs: Float) {
-    val eta = eta(targetTachoCount)
-    speed = when {
-        eta > goalMs + 500 -> {
-            LOG.warn { "Asking motor to go faster than it can (eta:${eta.toInt()}, goalMs:${goalMs.toInt()})" }
-            maxSpeed
-        }
-        eta < 10 || goalMs < 100 -> {
-            90f
-        }
-        else -> {
-            maxSpeed * (eta / goalMs)
-        }
-    }.toInt()
-    rotateTo(targetTachoCount, true)
-}
 
 /**
  * The drawing area is a 1x1 square
  * "forwards" (positive tacho) unrolls and extends string, "backwards" retracts
  * Position state is stored in the actual tachoCounts of each motor
- * Calibration is number of tachos along top edge
- * Start location assumed to be center, 0 tacho count
+ * Calibration is number of tachos along top edge, and fully retracted is the upper-left or right corner
  */
 class Plotter : AutoCloseable {
     // Starts uncalibrated
@@ -43,71 +20,74 @@ class Plotter : AutoCloseable {
     private val spoolRight = EV3LargeRegulatedMotor(MotorPort.D)
 
     /**
-     * Get the distance, leaving the plotter in center
-     * Also the scale factor of the drawing
+     * Get the distance (Also the scale factor of the drawing)
+     * Resets the tachos so location is accurate.
      */
-    private val spoolTachoDistance: Double by lazy {
-        println("Mark Upper Left")
-        check(manualMove()) { "Bailed on UL calibration." }
-        val tachoUL = Pair(spoolLeft.tachoCount, spoolRight.tachoCount)
-        LOG.info { "tachoUL(0,1): ${tachoUL.first},${tachoUL.second}" }
-        println("Find Upper Right")
-        check(manualMove()) { "Bailed on UR calibration." }
-        val tachoUR = Pair(spoolLeft.tachoCount, spoolRight.tachoCount)
-        LOG.info { "tachoUR(0,1): ${tachoUR.first},${tachoUR.second}" }
-        val spool0TachoDelta = Math.abs(tachoUR.first - tachoUL.first)
-        val spool1TachoDelta = Math.abs(tachoUL.second - tachoUR.second)
-        val squareEdgeTacho = Math.min(spool0TachoDelta, spool1TachoDelta).toDouble()
-        val halfDiagonalTacho = Math.sqrt(2 * squareEdgeTacho * squareEdgeTacho) / 2
-
-        assert(halfDiagonalTacho > squareEdgeTacho)
-
-        // Move to center of drawing and reset
-        spoolRight.rotate(halfDiagonalTacho.toInt()) // Careful!  Blocking to extend first
-        spoolLeft.rotate(-(squareEdgeTacho - halfDiagonalTacho).toInt())
-
-        spoolLeft.resetTachoCount()
-        spoolRight.resetTachoCount()
-
-        squareEdgeTacho
-    }
-
+    private val edgeTachoCount: Double
 
     init {
         LOG.info { "Power: ${Battery.getVoltageMilliVolt()}" }
         LCD.clear()
 
-        LOG.info { "Drawing scale: edge:${spoolTachoDistance.toInt()}" }
-        LOG.info { "Start location:${location.str} (should = {.5,.5})" }
+        println("Mark Upper Left")
+        check(manualMove()) { "Bailed on UL calibration." }
+        spoolLeft.resetTachoCount()
 
+        println("Find Upper Right")
+        check(manualMove()) { "Bailed on UR calibration." }
+        spoolRight.resetTachoCount()
+
+        edgeTachoCount = spoolLeft.tachoCount.toDouble()
         spoolLeft.synchronizeWith(arrayOf(spoolRight))
+
+        LOG.info { "Drawing scale: edge:$edgeTachoCount" }
+        LOG.info { "Start len: ${spoolLeft.tachoCount}, ${spoolRight.tachoCount}" }
+        LOG.info { "Start location:${location.str} (should be UR {1.0,0.0})" }
     }
 
     /**
-     * Required to be normalized 0..1 plotter location
+     * Required to be normalized 0.0..1.0 plotter location
      */
     var location: Point2D.Double
         get() {
-            val normalStrLenLeft = spoolLeft.tachoCount / spoolTachoDistance + 0.5
-            val normalStrLenRight = spoolRight.tachoCount / spoolTachoDistance + 0.5
-            return normalizedStringsToXY(normalStrLenLeft, normalStrLenRight)
+            val normalStrLenLeft = spoolLeft.tachoCount / edgeTachoCount
+            val normalStrLenRight = spoolRight.tachoCount / edgeTachoCount
+            return normalHypotToXY(normalStrLenLeft, normalStrLenRight)
         }
         set(normalLoc) {
-            val (targetNormalLengthLeft, targetNormalLengthRight) = normalizedXYToStrings(normalLoc)
+            val (currentNormalLenLeft, currentNormalLenRight) = normalXYToHypot(location)
+            val (targetNormalLenLeft, targetNormalLenRight) = normalXYToHypot(normalLoc)
+
+            val deltaNormalLeft = Math.abs(targetNormalLenLeft - currentNormalLenLeft)
+            val deltaNormalRight = Math.abs(targetNormalLenRight - currentNormalLenRight)
+
             LCD.setPixel((normalLoc.x * LCD.SCREEN_WIDTH).toInt(), (normalLoc.y * LCD.SCREEN_HEIGHT).toInt(), 1)
 
-            val targetTachoLengthLeft = ((targetNormalLengthLeft - 0.5) * spoolTachoDistance).toInt()
-            val targetTachoLengthRight = ((targetNormalLengthRight - 0.5) * spoolTachoDistance).toInt()
+            // Diagonals should arrive at the same time.
+            // 1. max out the speeds
+            spoolLeft.speed = MAX_SPEED
+            spoolRight.speed = MAX_SPEED
 
-            LOG.debug { "Moving from ${location.str} to ${normalLoc.str} l0:$targetTachoLengthLeft l1:$targetTachoLengthRight" }
+            // Slow down the one that moves a shorter distance
+            if (deltaNormalLeft < deltaNormalRight) {
+                spoolLeft.speed = (MAX_SPEED * (deltaNormalLeft / deltaNormalRight)).toInt()
+            }
+            if (deltaNormalLeft > deltaNormalRight) {
+                spoolRight.speed = (MAX_SPEED * (deltaNormalRight / deltaNormalLeft)).toInt()
+            }
 
-            val longestTimeToMove = Math.max(
-                    spoolLeft.eta(targetTachoLengthLeft),
-                    spoolRight.eta(targetTachoLengthRight)
-            )
+            val targetTachoLeft = (targetNormalLenLeft * edgeTachoCount).toInt()
+            val targetTachoRight = (targetNormalLenRight * edgeTachoCount).toInt()
+
+            check(targetTachoLeft in 0..(edgeTachoCount * 2).toInt())
+            check(targetTachoRight in 0..(edgeTachoCount * 2).toInt())
+
+            LOG.debug { "MOVE ${location.str} to ${normalLoc.str}; left: ${spoolLeft.tachoCount} to $targetTachoLeft; right: ${spoolRight.tachoCount} to $targetTachoRight" }
             spoolLeft.startSynchronization()
-            spoolLeft.rotateSlowlyTo(targetTachoLengthLeft, longestTimeToMove)
-            spoolRight.rotateSlowlyTo(targetTachoLengthRight, longestTimeToMove)
+
+            spoolLeft.rotateTo(targetTachoLeft)
+            spoolRight.rotateTo(targetTachoRight)
+
             spoolLeft.endSynchronization()
 
             spoolLeft.waitComplete()
@@ -118,7 +98,7 @@ class Plotter : AutoCloseable {
      * @return true if OK to continue
      */
     private fun manualMove(): Boolean {
-        val adjustDegrees = 360 * 2
+        val adjustDegrees = 360
         while (true) {
             when (Button.waitForAnyPress()) {
                 Button.ID_ENTER -> {
@@ -168,15 +148,19 @@ class Plotter : AutoCloseable {
         }
     }
 
-    override fun toString(): String = "Plotter state: {loc:${location.str}, l0:${spoolLeft.tachoCount}, l1:${spoolRight.tachoCount}} "
+    override fun toString(): String = "Plotter state: {loc:${location.str}, leftT:${spoolLeft.tachoCount}, rightT:${spoolRight.tachoCount}} "
 
     companion object {
         private val LOG = KotlinLogging.logger {}
+
+        private const val MAX_SPEED = 360
+
         /**
          * Normalized
          * @link https://www.marginallyclever.com/2012/02/drawbot-overview/ for diagram
          */
-        fun normalizedXYToStrings(target: Point2D.Double): Pair<Double, Double> {
+        fun normalXYToHypot(target: Point2D.Double): Pair<Double, Double> {
+
             target.checkNormal()
 
             val hypotenuseLeft = Math.sqrt(target.x * target.x + target.y * target.y)
@@ -194,16 +178,16 @@ class Plotter : AutoCloseable {
         /**
          * Heron's formula https://www.wikihow.com/Find-the-Height-of-a-Triangle
          */
-        fun normalizedStringsToXY(hypotenuseLeft: Double, hypotenuseRight: Double): Point2D.Double {
+        fun normalHypotToXY(hypotenuseLeft: Double, hypotenuseRight: Double): Point2D.Double {
             require(hypotenuseLeft >= 0) { "normalizedStringsToXY !normal hypotenuseLeft: ${hypotenuseLeft.str}" }
             require(hypotenuseLeft < 1.5) { "normalizedStringsToXY !normal hypotenuseLeft: ${hypotenuseLeft.str}" }
             require(hypotenuseRight >= 0) { "normalizedStringsToXY !normal hypotenuseRight: ${hypotenuseRight.str}" }
             require(hypotenuseRight < 1.5) { "normalizedStringsToXY !normal hypotenuseRight: ${hypotenuseRight.str}" }
 
             val topEdge = 1.0
-            require(topEdge <= hypotenuseLeft + hypotenuseRight)
-            require(hypotenuseLeft <= topEdge + hypotenuseRight)
-            require(hypotenuseRight <= topEdge + hypotenuseLeft)
+            require(topEdge <= hypotenuseLeft + hypotenuseRight) { "Not a happy triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
+            require(hypotenuseLeft <= topEdge + hypotenuseRight) { "Not a happy triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
+            require(hypotenuseRight <= topEdge + hypotenuseLeft) { "Not a happy triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
 
             val s = (topEdge + hypotenuseLeft + hypotenuseRight) / 2
             val y = Math.sqrt(s * (s - topEdge) * (s - hypotenuseLeft) * (s - hypotenuseRight)) / (0.5 * topEdge)
