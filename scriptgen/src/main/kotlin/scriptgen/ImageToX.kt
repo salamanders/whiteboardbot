@@ -1,5 +1,6 @@
 package scriptgen
 
+import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 import java.awt.BasicStroke
 import java.awt.Color
 import java.awt.Dimension
@@ -20,6 +21,9 @@ abstract class ImageToX(fileName: String) : AutoCloseable, Runnable {
     protected val imageDimension = Dimension(inputImage.width, inputImage.height)
     /** A sample rendering */
     private val outputImage = BufferedImage(inputImage.width, inputImage.height, BufferedImage.TYPE_USHORT_GRAY)
+
+    protected val script = mutableListOf<Vector2D>()
+
     protected val outputG2d = outputImage.createGraphics()!!.apply {
         color = Color.WHITE
         fillRect(0, 0, outputImage.width, outputImage.height)
@@ -31,6 +35,8 @@ abstract class ImageToX(fileName: String) : AutoCloseable, Runnable {
     override fun close() {
         ImageIO.write(outputImage, "png", File("output.png"))
         ImageIO.write(inputImage, "png", File("input_scribbled.png"))
+
+        println(normalizePoints(script).joinToString(",\n") { it.toJSON() })
 
         inputG2d.dispose()
         outputG2d.dispose()

@@ -62,10 +62,6 @@ class ImageToTrace(fileName: String) : ImageToX(fileName) {
 
         (0..200_000).forEach { step ->
             getNextLocation(loc)?.let { (nextLoc, color) ->
-                val dist = loc.distance(nextLoc)
-                if (step % 100 == 0) {
-                    LOG.info { "loc:${loc.toJSON()} dist:${dist.roundToInt()}" }
-                }
                 inputG2d.color = color
                 inputG2d.drawLine(loc.ix, loc.iy, nextLoc.ix, nextLoc.iy)
                 outputG2d.drawLine(loc.ix, loc.iy, nextLoc.ix, nextLoc.iy)

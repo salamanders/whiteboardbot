@@ -1,4 +1,4 @@
-package info.benjaminhill.wbb
+package scriptgen
 
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 

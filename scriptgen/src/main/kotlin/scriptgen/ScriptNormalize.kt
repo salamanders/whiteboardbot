@@ -21,9 +21,7 @@ fun fileToPath(svgXmlFile: File): List<Vector2D> {
 }
 
 fun main() {
-
     var pctScale = 1.0
-
     for (circle in 1..20) {
         for (deg in 1..360 step 5) {
             pctScale -= (1.0 / (20 * (360 / 5)))
@@ -34,11 +32,10 @@ fun main() {
             println("$p,")
         }
     }
-
 }
 
 /** Scale proportionally to fit in a unit sq */
-fun normalizePoints(points: List<Vector2D>): List<NormalizedVector2D> {
+fun normalizePoints(points: List<Vector2D>): List<NormalVector2D> {
     val globalMin = Vector2D(points.minBy { it.x }!!.x, points.minBy { it.y }!!.y)
     val globalMax = Vector2D(points.maxBy { it.x }!!.x, points.maxBy { it.y }!!.y)
 
@@ -47,6 +44,8 @@ fun normalizePoints(points: List<Vector2D>): List<NormalizedVector2D> {
     val scaleFactor = Math.min(xScale, yScale)
 
     return points.map {
-        NormalizedVector2D.asNormalized(it.subtract(globalMin).scalarMultiply(scaleFactor))
+        it.subtract(globalMin).scalarMultiply(scaleFactor)
+    }.map {
+        NormalVector2D(it.x, it.y)
     }
 }

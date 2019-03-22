@@ -44,23 +44,13 @@ class ImageToScribble(fileName: String, private val strokes: Int, private val se
     }
 
     override fun run() {
-        val realPoints = mutableListOf<Vector2D>()
-        realPoints.add(Vector2D(imageDimension.width / 2.0, imageDimension.height / 2.0)) // Start in center
+        script.add(Vector2D(imageDimension.width / 2.0, imageDimension.height / 2.0)) // Start in center
 
         for (i in 0..strokes) {
-            //val nextLoc = inputImage.getDarkestNear(realPoints.last(), 8_000)
-            val nextLoc = getNextLocation(realPoints.last())
-            inputG2d.drawLine(realPoints.last().ix, realPoints.last().iy, nextLoc.ix, nextLoc.iy)
-            outputG2d.drawLine(realPoints.last().ix, realPoints.last().iy, nextLoc.ix, nextLoc.iy)
-            realPoints.add(nextLoc)
-        }
-
-        val maxX = realPoints.maxBy { it.x }!!.x
-        val maxY = realPoints.maxBy { it.y }!!.y
-        val scale = Math.min(1 / maxX, 1 / maxY)
-        realPoints.forEach {
-            val pt = Vector2D(it.x * scale, it.y * scale)
-            println("$pt,")
+            val nextLoc = getNextLocation(script.last())
+            inputG2d.drawLine(script.last().ix, script.last().iy, nextLoc.ix, nextLoc.iy)
+            outputG2d.drawLine(script.last().ix, script.last().iy, nextLoc.ix, nextLoc.iy)
+            script.add(nextLoc)
         }
     }
 }

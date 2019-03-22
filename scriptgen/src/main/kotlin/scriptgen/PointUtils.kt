@@ -8,34 +8,6 @@ import javax.imageio.ImageIO
 
 import kotlin.math.roundToInt
 
-/** Extra check to make sure a sane normal vector */
-class NormalizedVector2D(x: Double, y: Double) : Vector2D(x, y) {
-
-    init {
-        requireNormal(this)
-    }
-
-    companion object {
-
-        fun asNormalized(v: Vector2D): NormalizedVector2D {
-            requireNormal(v)
-            return v as NormalizedVector2D
-        }
-
-        fun requireNormal(v: Vector2D) {
-            v.apply {
-                require(x.isFinite() && y.isFinite()) { "Bad NormalizedVector2D($x, $y)" }
-                require(x > -0.1 &&
-                        x < 1.1 &&
-                        y > -0.1 &&
-                        y < 1.1
-                ) { "non normal point: $x x $y" }
-            }
-        }
-    }
-}
-
-
 operator fun Vector2D.component1(): kotlin.Double = this.x
 operator fun Vector2D.component2(): kotlin.Double = this.y
 
@@ -61,7 +33,7 @@ fun Vector2D.getPointsAlongLine(other: Vector2D): List<Vector2D> {
 fun getImage(fileName: String, res: Int = 500): BufferedImage {
     val resource = fileName.let {
         object {}.javaClass::class.java.getResource(it)
-                ?: File("src/main/resources/$it").toURI().toURL()!!
+                ?: File("scriptgen/src/main/resources/$it").toURI().toURL()!!
     }
     return Scalr.resize(ImageIO.read(resource)!!, Scalr.Method.ULTRA_QUALITY, res, res)!!
 }
@@ -81,7 +53,3 @@ fun BufferedImage.getLum(x: Int, y: Int): Float {
 /** Shorter round for the logs */
 val Double.str: String
     get() = "%.3f".format(this)
-
-
-
-fun Vector2D.toJSON(): String = "{\"x\":${x.str}, \"y\":${y.str}}"
