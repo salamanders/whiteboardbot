@@ -1,6 +1,5 @@
-package info.benjaminhill.wbb.scriptgen
+package scriptgen
 
-import info.benjaminhill.wbb.*
 import mu.KotlinLogging
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 import java.awt.BasicStroke
@@ -14,7 +13,7 @@ import kotlin.math.roundToInt
 class ImageToTrace(fileName: String) : ImageToX(fileName) {
 
     private val diagonal = Math.sqrt((imageDimension.width * imageDimension.width + imageDimension.height * imageDimension.height).toDouble()).roundToInt()
-    private val center = Vector2D(imageDimension.width / 2, imageDimension.height / 2)
+    private val center = Vector2D(imageDimension.width / 2.0, imageDimension.height / 2.0)
     private val zeroDeg = Vector2D(1.0, 0.0)
     /**
      * Fold back along yourself, then counter-clockwise look for first good pixel

@@ -1,6 +1,5 @@
-package info.benjaminhill.wbb.scriptgen
+package scriptgen
 
-import info.benjaminhill.wbb.*
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 import java.util.concurrent.ThreadLocalRandom
 import kotlin.math.roundToInt
@@ -46,7 +45,7 @@ class ImageToScribble(fileName: String, private val strokes: Int, private val se
 
     override fun run() {
         val realPoints = mutableListOf<Vector2D>()
-        realPoints.add(Vector2D(imageDimension.width / 2, imageDimension.height / 2)) // Start in center
+        realPoints.add(Vector2D(imageDimension.width / 2.0, imageDimension.height / 2.0)) // Start in center
 
         for (i in 0..strokes) {
             //val nextLoc = inputImage.getDarkestNear(realPoints.last(), 8_000)

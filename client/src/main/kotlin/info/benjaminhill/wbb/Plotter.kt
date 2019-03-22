@@ -51,7 +51,7 @@ class Plotter : AutoCloseable {
     /**
      * Required to be normalized 0.0..1.0 plotter location
      */
-    var location: NormalizedVector2D
+    var location: NormalVector2D
         get() {
             val normalStrLenLeft = spoolLeft.tachoCount / edgeTachoCount
             val normalStrLenRight = spoolRight.tachoCount / edgeTachoCount
@@ -64,7 +64,7 @@ class Plotter : AutoCloseable {
             val deltaNormalLeft = Math.abs(targetNormalLenLeft - currentNormalLenLeft)
             val deltaNormalRight = Math.abs(targetNormalLenRight - currentNormalLenRight)
 
-            LCD.setPixel(normalLoc.ix * LCD.SCREEN_WIDTH, normalLoc.iy * LCD.SCREEN_HEIGHT, 1)
+            LCD.setPixel((normalLoc.x * LCD.SCREEN_WIDTH).toInt(), (normalLoc.y * LCD.SCREEN_HEIGHT).toInt(), 1)
 
             // Diagonals should arrive at the same time.
             // 1. max out the speeds
@@ -170,7 +170,7 @@ class Plotter : AutoCloseable {
          * Normalized
          * @link https://www.marginallyclever.com/2012/02/drawbot-overview/ for diagram
          */
-        fun xyToHypot(target: NormalizedVector2D): Pair<Double, Double> {
+        fun xyToHypot(target: NormalVector2D): Pair<Double, Double> {
 
             val hypotenuseLeft = Math.sqrt(target.x * target.x + target.y * target.y)
             val xb = 1.0 - target.x  // same as V-M2 in the picture
@@ -184,7 +184,7 @@ class Plotter : AutoCloseable {
         /**
          * Heron's formula https://www.wikihow.com/Find-the-Height-of-a-Triangle
          */
-        fun hypotToXY(hypotenuseLeft: Double, hypotenuseRight: Double): NormalizedVector2D {
+        fun hypotToXY(hypotenuseLeft: Double, hypotenuseRight: Double): NormalVector2D {
             checkNormalizedStringLengths(hypotenuseLeft, hypotenuseRight)
 
             val topEdge = 1.0
@@ -194,17 +194,17 @@ class Plotter : AutoCloseable {
 
             if (hypotenuseLeft + hypotenuseRight <= topEdge) {
                 LOG.warn { "hypotToXY skirting the top: ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
-                return NormalizedVector2D(hypotenuseLeft, 0.0)
+                return NormalVector2D(hypotenuseLeft, 0.0)
             }
 
             if (hypotenuseRight > Math.sqrt(hypotenuseLeft * hypotenuseLeft + 1)) {
                 LOG.warn { "hypotToXY skirting the left: ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
-                return NormalizedVector2D(0.0, hypotenuseLeft)
+                return NormalVector2D(0.0, hypotenuseLeft)
             }
 
             if (hypotenuseLeft > Math.sqrt(hypotenuseRight * hypotenuseRight + 1)) {
                 LOG.warn { "hypotToXY skirting the right: ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
-                return NormalizedVector2D(1.0, hypotenuseRight)
+                return NormalVector2D(1.0, hypotenuseRight)
             }
 
             val s = (topEdge + hypotenuseLeft + hypotenuseRight) / 2
@@ -213,7 +213,7 @@ class Plotter : AutoCloseable {
 
             check(x.isFinite() && y.isFinite()) { "Non Finite hypotToXY($hypotenuseLeft,$hypotenuseRight) output ($x, $y)" }
 
-            return NormalizedVector2D(x, y)
+            return NormalVector2D(x, y)
         }
     }
 }

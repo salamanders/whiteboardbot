@@ -15,8 +15,8 @@ class RemoteControl(scriptURL: String) : AutoCloseable, Runnable, CoroutineScope
 
     private val script = async {
         val config = JsonParser().parse(URL(scriptURL).readTextSupportGZIP()).asJsonObject!!
-        val listOfPointsType = object : TypeToken<List<NormalizedVector2D>>() {}.type!!
-        Gson().fromJson<List<NormalizedVector2D>>(config.getAsJsonArray("script"), listOfPointsType)!!.also {
+        val listOfPointsType = object : TypeToken<List<NormalVector2D>>() {}.type!!
+        Gson().fromJson<List<NormalVector2D>>(config.getAsJsonArray("script"), listOfPointsType)!!.also {
             LOG.debug { "Web script loaded: ${it.size}" }
         }
     }
@@ -39,7 +39,7 @@ class RemoteControl(scriptURL: String) : AutoCloseable, Runnable, CoroutineScope
         Unit
     }
 
-    private fun runScript(path: List<NormalizedVector2D>) {
+    private fun runScript(path: List<NormalVector2D>) {
         LOG.info { "RC plotting ${path.size} points." }
         path.forEachIndexed { idx, point ->
             plotter.location = point

@@ -1,9 +1,6 @@
-package info.benjaminhill.wbb.scriptgen
+package scriptgen
 
-import info.benjaminhill.wbb.Vector2D
-import info.benjaminhill.wbb.angleToVector2D
-import info.benjaminhill.wbb.ix
-import info.benjaminhill.wbb.iy
+import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 
 fun main() {
     Hilbert("xwing6.png").use { it.run() }
@@ -17,7 +14,7 @@ class Hilbert(fileName: String) : ImageToX(fileName) {
 
     private var heading = 0
     private val stepSize = 2.0
-    private var location = Vector2D(imageDimension.width / 2, imageDimension.height / 2)
+    private var location = Vector2D(imageDimension.width / 2.0, imageDimension.height / 2.0)
 
     private fun rotate(deg: Int) {
         heading += deg

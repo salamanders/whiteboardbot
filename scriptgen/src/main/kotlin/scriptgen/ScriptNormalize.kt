@@ -1,6 +1,5 @@
-package info.benjaminhill.wbb.scriptgen
+package scriptgen
 
-import info.benjaminhill.wbb.NormalizedVector2D
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 import org.w3c.dom.Element
 import java.io.File
