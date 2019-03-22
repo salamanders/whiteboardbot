@@ -11,7 +11,7 @@ val LOG = KotlinLogging.logger {}
 fun main() {
     LOG.info { "main(): debug:${LOG.isDebugEnabled}" }
 
-    RemoteControl().use {
+    RemoteControl("https://whiteboardbot.firebaseapp.com/config.json").use {
         it.run()
         println("Finished Script")
     }

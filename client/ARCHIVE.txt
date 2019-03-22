@@ -1,3 +1,49 @@
+      headingOffsetDeg -= (360*arcStepPct)
+                // don't take sharp left turns
+                /*
+                if (hopSize < 3 && headingOffsetDeg < 0) {
+                    continue@heading
+                }
+
+                 */
+                val nextHeadingDeg = (headingDeg + headingOffsetDeg) % 360
+                val nextHeadingRad = Math.toRadians( nextHeadingDeg)
+                val nextDirection = Vector2D(Math.cos(nextHeadingRad), Math.sin(nextHeadingRad)).normalize()
+
+                val nextLoc = currentLoc.add(nextDirection.scalarMultiply(hopSize.toDouble()))
+                if (nextLoc.ix !in 0 until imageDimension.width ||
+                        nextLoc.iy !in 0 until imageDimension.height) {
+                    continue@heading
+                }
+                val lum = inputImage.getLum(nextLoc.ix, nextLoc.iy)
+                if (lum > 0.2) {
+                    continue@heading
+                }
+                val color = if (Math.abs(headingOffsetDeg) > 45) {
+                    Color.ORANGE
+                } else {
+                    Color.CYAN
+                }!!
+                return Triple(nextLoc, nextHeadingDeg, color)
+
+
+                /*
+            // Circle:
+
+             */
+
+             /*
+fun BufferedImage.getAverageLum(): Double {
+    var totalLum = 0.0
+    for (x in 0 until width) {
+        for (y in 0 until height) {
+            totalLum += getLum(WPoint(x, y))
+        }
+    }
+    return totalLum / (width * height)
+}
+
+
 const val TECHNIC_AXLE_CIRCUMFERENCE_CM = (2 * Math.PI * 2.5) / 10
 
 val <T : Number> Pair<T, T>.x

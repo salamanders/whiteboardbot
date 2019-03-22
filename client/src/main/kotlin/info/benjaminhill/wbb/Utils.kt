@@ -1,42 +1,22 @@
 package info.benjaminhill.wbb
 
-import lejos.robotics.geometry.Point2D
-import org.w3c.dom.Element
+import kotlinx.coroutines.CoroutineDispatcher
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.asCoroutineDispatcher
+import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
+import org.imgscalr.Scalr
+import java.awt.image.BufferedImage
 import java.io.File
-import java.net.DatagramPacket
-import java.net.DatagramSocket
-import java.net.NetworkInterface
-import java.net.SocketTimeoutException
+import java.io.InputStreamReader
+import java.net.*
 import java.util.*
-import javax.xml.parsers.DocumentBuilderFactory
-import kotlin.random.Random
+import java.util.concurrent.Executors
+import java.util.zip.GZIPInputStream
+import javax.imageio.ImageIO
 
 /** Shorter round for the logs */
 val Double.str: String
     get() = "%.3f".format(this)
-
-/** Shorter round for the logs */
-val Float.str: String
-    get() = "%.3f".format(this)
-
-val Point2D.Double.str
-    get() = "{\"x\":${this.x.str}, \"y\":${this.y.str}}"
-
-fun Point2D.Double.checkNormal() {
-    check(x > -0.1) { "non normal point: $str" }
-    check(x < 1.1) { "non normal point: $str" }
-    check(y > -0.1) { "non normal point: $str" }
-    check(y < 1.1) { "non normal point: $str" }
-}
-
-val lejos.robotics.geometry.Point.str
-    get() = "{\"x\":${this.x}, \"y\":${this.y}}"
-
-val java.awt.Point.str
-    get() = "{\"x\":${this.x}, \"y\":${this.y}}"
-
-operator fun Point2D.Double.component1(): Double = this.x
-operator fun Point2D.Double.component2(): Double = this.y
 
 /** Simple REPL keys to commands that always have 'q' to quit */
 fun keyboardCommands() = sequence {
@@ -51,47 +31,16 @@ fun keyboardCommands() = sequence {
     }
 }
 
-/** Hacky parse of a SVG, like what StippleGen2 produces */
-fun fileToPath(svgXmlFile: File): List<Point2D> {
-    assert(svgXmlFile.canRead())
-    val doc = DocumentBuilderFactory.newInstance().newDocumentBuilder().parse(svgXmlFile)!!
-    val pathElement = doc.getElementsByTagName("path")!!.item(0)!! as Element
-    val pen = Scanner(pathElement.getAttribute("d"))
-    pen.next() // discard the first character
-    val points = mutableListOf<Point2D>()
-    while (pen.hasNext()) {
-        points.add(Point2D.Double(pen.nextDouble(), pen.nextDouble()))
+/** No fun if just one thread */
+val backgroundPool: CoroutineDispatcher by lazy {
+    val numProcessors = Runtime.getRuntime().availableProcessors()
+    when {
+        numProcessors < 3 -> {
+            LOG.info { "Using custom thread pool context with 3 threads." }
+            Executors.newFixedThreadPool(3).asCoroutineDispatcher()
+        }
+        else -> Dispatchers.Default
     }
-    return points
-}
-
-/** Scale proportionally to fit in a unit sq */
-fun normalizePoints(points: List<Point2D>): List<Point2D> {
-    val globalMin = Point2D.Double(points.minBy { it.x }!!.x, points.minBy { it.y }!!.y)
-    val globalMax = Point2D.Double(points.maxBy { it.x }!!.x, points.maxBy { it.y }!!.y)
-
-    val xScale = 1 / (globalMax.x - globalMin.x)
-    val yScale = 1 / (globalMax.y - globalMin.y)
-    val scaleFactor = Math.min(xScale, yScale)
-
-    return points.map {
-        Point2D.Double(
-                ((it.x - globalMin.x) * scaleFactor),
-                ((it.y - globalMin.y) * scaleFactor)
-        )
-    }
-}
-
-
-fun exponentialRetryDelayMs(): Sequence<Long> {
-    return generateSequence(500L) { retryIntervalMs ->
-        (retryIntervalMs * 1.5 + Random.nextInt(0, 1000)).toLong().takeIf { it < 60 * 1_000 }
-    }
-}
-
-/** For when you need a temp ID for the duration of an app run */
-val sessionId by lazy {
-    "23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ".toList().shuffled().take(4).joinToString()
 }
 
 /** Finds the first brick on the LAN */
@@ -128,3 +77,47 @@ fun getBrickIPAddress(): String? {
     return null
 }
 
+
+fun URL.readTextSupportGZIP(): String {
+    try {
+        val con = openConnection() as HttpURLConnection
+        con.setRequestProperty("Accept-Encoding", "gzip")
+        if ("gzip" == con.contentEncoding) {
+            LOG.debug { "Able to read GZIP content" }
+            InputStreamReader(GZIPInputStream(con.inputStream))
+        } else {
+            LOG.debug { "Able to read plain content" }
+            InputStreamReader(con.inputStream)
+        }.use { reader ->
+            return reader.readText()
+        }
+    } catch (e: Exception) {
+        LOG.error { e.toString() }
+        return readText()
+    }
+}
+
+
+fun getImage(fileName: String, res: Int = 500): BufferedImage {
+    val resource = fileName.let {
+        object {}.javaClass::class.java.getResource(it)
+                ?: File("./client/src/main/resources/$it").toURI().toURL()!!
+    }
+    return Scalr.resize(ImageIO.read(resource)!!, Scalr.Method.ULTRA_QUALITY, res, res)!!
+}
+
+fun BufferedImage.getLum(x: Int, y: Int): Float {
+    require(x in 0 until width) { "x:$x outside of $width x $height" }
+    require(y in 0 until height) { "y:$y outside of $width x $height" }
+    val color = getRGB(x, y)
+    val red = color.ushr(16) and 0xFF
+    val green = color.ushr(8) and 0xFF
+    val blue = color.ushr(0) and 0xFF
+    return (red * 0.2126f + green * 0.7152f + blue * 0.0722f) / 255
+}
+
+fun BufferedImage.getLum(loc: Vector2D): Float = getLum(loc.ix, loc.iy)
+
+fun isqrt(v: Int) = Math.sqrt(v.toDouble()).toInt()
+
+fun Vector2D(x: Int, y: Int) = Vector2D(x.toDouble(), y.toDouble())

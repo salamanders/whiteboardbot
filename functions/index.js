@@ -20,11 +20,11 @@ exports.dbToDevice = functions.firestore.document('wbb/{boardId}').onUpdate(asyn
   const newValue = change.after.data();
   const previousValue = change.before.data();
 
-  const intestingFields = ['spoolDistanceCm'];
-  const interestingChange = intestingFields.some((element, index) => previousValue[index] !== newValue[index]);
+  const interestingFields = ['spoolDistanceCm'];
+  const interestingChange = interestingFields.some((element, index) => previousValue[index] !== newValue[index]);
 
   if (interestingChange) {
-    const state = intestingFields.reduce((accumulator, fieldName) => {
+    const state = interestingFields.reduce((accumulator, fieldName) => {
       accumulator[fieldName] = newValue[fieldName]
     }, {});
 

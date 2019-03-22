@@ -4,21 +4,19 @@ import com.google.gson.Gson
 import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
-import lejos.robotics.geometry.Point2D
 import mu.KotlinLogging
 import java.net.URL
 import kotlin.coroutines.CoroutineContext
 
-
-class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
+class RemoteControl(scriptURL: String) : AutoCloseable, Runnable, CoroutineScope {
 
     private val job = Job()
-    override val coroutineContext: CoroutineContext get() = job + Dispatchers.Default
+    override val coroutineContext: CoroutineContext get() = job + backgroundPool
 
-    private val script = async(coroutineContext) {
-        val config = JsonParser().parse(URL("https://whiteboardbot.firebaseapp.com/config.json").readText()).asJsonObject!!
-        val listOfPointsType = object : TypeToken<List<Point2D.Double>>() {}.type!!
-        Gson().fromJson<List<Point2D.Double>>(config.getAsJsonArray("script"), listOfPointsType)!!.also {
+    private val script = async {
+        val config = JsonParser().parse(URL(scriptURL).readTextSupportGZIP()).asJsonObject!!
+        val listOfPointsType = object : TypeToken<List<NormalizedVector2D>>() {}.type!!
+        Gson().fromJson<List<NormalizedVector2D>>(config.getAsJsonArray("script"), listOfPointsType)!!.also {
             LOG.debug { "Web script loaded: ${it.size}" }
         }
     }
@@ -29,19 +27,19 @@ class RemoteControl : AutoCloseable, Runnable, CoroutineScope {
 
     override fun run() = runBlocking {
         LOG.info { "FRAME:START" }
-        // Frame the drawing area
-        plotter.location = Point2D.Double(0.0, 0.0)
-        plotter.location = Point2D.Double(1.0, 0.0)
-        plotter.location = Point2D.Double(1.0, 1.0)
-        plotter.location = Point2D.Double(0.0, 1.0)
-        plotter.location = Point2D.Double(0.0, 0.0)
+        script.start()
+        // Already at plotter.location = WPoint(1.0, 0.0)
+
+        //plotter.location = WPoint(1.0, 1.0)
+        //plotter.location = WPoint(0.0, 1.0)
+        //plotter.location = WPoint(0.0, 0.0)
         LOG.info { "FRAME:END" }
 
         runScript(script.await())
         Unit
     }
 
-    private fun runScript(path: List<Point2D.Double>) {
+    private fun runScript(path: List<NormalizedVector2D>) {
         LOG.info { "RC plotting ${path.size} points." }
         path.forEachIndexed { idx, point ->
             plotter.location = point

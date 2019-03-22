@@ -5,7 +5,6 @@ import lejos.hardware.Button
 import lejos.hardware.lcd.LCD
 import lejos.hardware.motor.EV3LargeRegulatedMotor
 import lejos.hardware.port.MotorPort
-import lejos.robotics.geometry.Point2D
 import mu.KotlinLogging
 
 /**
@@ -16,8 +15,12 @@ import mu.KotlinLogging
  */
 class Plotter : AutoCloseable {
     // Starts uncalibrated
-    private val spoolLeft = EV3LargeRegulatedMotor(MotorPort.A)
-    private val spoolRight = EV3LargeRegulatedMotor(MotorPort.D)
+    private val spoolLeft = EV3LargeRegulatedMotor(MotorPort.A).apply {
+        speed = MAX_SPEED
+    }
+    private val spoolRight = EV3LargeRegulatedMotor(MotorPort.D).apply {
+        speed = MAX_SPEED
+    }
 
     /**
      * Get the distance (Also the scale factor of the drawing)
@@ -42,26 +45,26 @@ class Plotter : AutoCloseable {
 
         LOG.info { "Drawing scale: edge:$edgeTachoCount" }
         LOG.info { "Start len: ${spoolLeft.tachoCount}, ${spoolRight.tachoCount}" }
-        LOG.info { "Start location:${location.str} (should be UR {1.0,0.0})" }
+        LOG.info { "Start location:$location (UR:{1,0})" }
     }
 
     /**
      * Required to be normalized 0.0..1.0 plotter location
      */
-    var location: Point2D.Double
+    var location: NormalizedVector2D
         get() {
             val normalStrLenLeft = spoolLeft.tachoCount / edgeTachoCount
             val normalStrLenRight = spoolRight.tachoCount / edgeTachoCount
-            return normalHypotToXY(normalStrLenLeft, normalStrLenRight)
+            return hypotToXY(normalStrLenLeft, normalStrLenRight)
         }
         set(normalLoc) {
-            val (currentNormalLenLeft, currentNormalLenRight) = normalXYToHypot(location)
-            val (targetNormalLenLeft, targetNormalLenRight) = normalXYToHypot(normalLoc)
+            val (currentNormalLenLeft, currentNormalLenRight) = xyToHypot(location)
+            val (targetNormalLenLeft, targetNormalLenRight) = xyToHypot(normalLoc)
 
             val deltaNormalLeft = Math.abs(targetNormalLenLeft - currentNormalLenLeft)
             val deltaNormalRight = Math.abs(targetNormalLenRight - currentNormalLenRight)
 
-            LCD.setPixel((normalLoc.x * LCD.SCREEN_WIDTH).toInt(), (normalLoc.y * LCD.SCREEN_HEIGHT).toInt(), 1)
+            LCD.setPixel(normalLoc.ix * LCD.SCREEN_WIDTH, normalLoc.iy * LCD.SCREEN_HEIGHT, 1)
 
             // Diagonals should arrive at the same time.
             // 1. max out the speeds
@@ -79,10 +82,11 @@ class Plotter : AutoCloseable {
             val targetTachoLeft = (targetNormalLenLeft * edgeTachoCount).toInt()
             val targetTachoRight = (targetNormalLenRight * edgeTachoCount).toInt()
 
-            check(targetTachoLeft in 0..(edgeTachoCount * 2).toInt())
-            check(targetTachoRight in 0..(edgeTachoCount * 2).toInt())
+            // Hyperextension is bad (ran out of string).  So is grinding gears.
+            check(targetTachoLeft in 0..(edgeTachoCount * 1.5).toInt())
+            check(targetTachoRight in 0..(edgeTachoCount * 1.5).toInt())
 
-            LOG.debug { "MOVE ${location.str} to ${normalLoc.str}; left: ${spoolLeft.tachoCount} to $targetTachoLeft; right: ${spoolRight.tachoCount} to $targetTachoRight" }
+            LOG.debug { "MOVE $location to $normalLoc; left: ${spoolLeft.tachoCount} to $targetTachoLeft; right: ${spoolRight.tachoCount} to $targetTachoRight" }
             spoolLeft.startSynchronization()
 
             spoolLeft.rotateTo(targetTachoLeft)
@@ -148,29 +152,31 @@ class Plotter : AutoCloseable {
         }
     }
 
-    override fun toString(): String = "Plotter state: {loc:${location.str}, leftT:${spoolLeft.tachoCount}, rightT:${spoolRight.tachoCount}} "
+    override fun toString(): String = "Plotter state: {loc:$location, leftT:${spoolLeft.tachoCount}, rightT:${spoolRight.tachoCount}} "
 
     companion object {
         private val LOG = KotlinLogging.logger {}
 
-        private const val MAX_SPEED = 360
+        private const val MAX_SPEED = 180
+
+        private fun checkNormalizedStringLengths(hypotenuseLeft: Double, hypotenuseRight: Double) {
+            check(hypotenuseLeft >= 0) { "normalized string unexpected hypotenuseLeft:${hypotenuseLeft.str}" }
+            check(hypotenuseLeft < 1.5) { "normalized string unexpected hypotenuseLeft:${hypotenuseLeft.str}" }
+            check(hypotenuseRight >= 0) { "normalized string unexpected hypotenuseRight:${hypotenuseLeft.str}" }
+            check(hypotenuseRight < 1.5) { "normalized string unexpected hypotenuseRight:${hypotenuseRight.str}" }
+        }
 
         /**
          * Normalized
          * @link https://www.marginallyclever.com/2012/02/drawbot-overview/ for diagram
          */
-        fun normalXYToHypot(target: Point2D.Double): Pair<Double, Double> {
-
-            target.checkNormal()
+        fun xyToHypot(target: NormalizedVector2D): Pair<Double, Double> {
 
             val hypotenuseLeft = Math.sqrt(target.x * target.x + target.y * target.y)
             val xb = 1.0 - target.x  // same as V-M2 in the picture
             val hypotenuseRight = Math.sqrt(xb * xb + target.y * target.y)
 
-            check(hypotenuseLeft >= 0) { "normalizedXYToStrings unexpected hypotenuseLeft:${hypotenuseLeft.str}" }
-            check(hypotenuseLeft < 1.5) { "normalizedXYToStrings unexpected hypotenuseLeft:${hypotenuseLeft.str}" }
-            check(hypotenuseRight >= 0) { "normalizedXYToStrings unexpected hypotenuseRight:${hypotenuseLeft.str}" }
-            check(hypotenuseRight < 1.5) { "normalizedXYToStrings unexpected hypotenuseRight:${hypotenuseRight.str}" }
+            checkNormalizedStringLengths(hypotenuseLeft, hypotenuseRight)
 
             return hypotenuseLeft to hypotenuseRight
         }
@@ -178,22 +184,36 @@ class Plotter : AutoCloseable {
         /**
          * Heron's formula https://www.wikihow.com/Find-the-Height-of-a-Triangle
          */
-        fun normalHypotToXY(hypotenuseLeft: Double, hypotenuseRight: Double): Point2D.Double {
-            require(hypotenuseLeft >= 0) { "normalizedStringsToXY !normal hypotenuseLeft: ${hypotenuseLeft.str}" }
-            require(hypotenuseLeft < 1.5) { "normalizedStringsToXY !normal hypotenuseLeft: ${hypotenuseLeft.str}" }
-            require(hypotenuseRight >= 0) { "normalizedStringsToXY !normal hypotenuseRight: ${hypotenuseRight.str}" }
-            require(hypotenuseRight < 1.5) { "normalizedStringsToXY !normal hypotenuseRight: ${hypotenuseRight.str}" }
+        fun hypotToXY(hypotenuseLeft: Double, hypotenuseRight: Double): NormalizedVector2D {
+            checkNormalizedStringLengths(hypotenuseLeft, hypotenuseRight)
 
             val topEdge = 1.0
-            require(topEdge <= hypotenuseLeft + hypotenuseRight) { "Not a happy triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
-            require(hypotenuseLeft <= topEdge + hypotenuseRight) { "Not a happy triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
-            require(hypotenuseRight <= topEdge + hypotenuseLeft) { "Not a happy triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
+            require(topEdge <= hypotenuseLeft + hypotenuseRight + 0.05) { "Not a happy T triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
+            require(hypotenuseLeft <= topEdge + hypotenuseRight + 0.05) { "Not a happy L triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
+            require(hypotenuseRight <= topEdge + hypotenuseLeft + 0.05) { "Not a happy R triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
+
+            if (hypotenuseLeft + hypotenuseRight <= topEdge) {
+                LOG.warn { "hypotToXY skirting the top: ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
+                return NormalizedVector2D(hypotenuseLeft, 0.0)
+            }
+
+            if (hypotenuseRight > Math.sqrt(hypotenuseLeft * hypotenuseLeft + 1)) {
+                LOG.warn { "hypotToXY skirting the left: ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
+                return NormalizedVector2D(0.0, hypotenuseLeft)
+            }
+
+            if (hypotenuseLeft > Math.sqrt(hypotenuseRight * hypotenuseRight + 1)) {
+                LOG.warn { "hypotToXY skirting the right: ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }
+                return NormalizedVector2D(1.0, hypotenuseRight)
+            }
 
             val s = (topEdge + hypotenuseLeft + hypotenuseRight) / 2
             val y = Math.sqrt(s * (s - topEdge) * (s - hypotenuseLeft) * (s - hypotenuseRight)) / (0.5 * topEdge)
             val x = Math.sqrt(hypotenuseLeft * hypotenuseLeft - y * y)
 
-            return Point2D.Double(x, y).also { it.checkNormal() }
+            check(x.isFinite() && y.isFinite()) { "Non Finite hypotToXY($hypotenuseLeft,$hypotenuseRight) output ($x, $y)" }
+
+            return NormalizedVector2D(x, y)
         }
     }
 }

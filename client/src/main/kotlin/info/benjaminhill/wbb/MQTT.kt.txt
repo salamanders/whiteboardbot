@@ -148,3 +148,15 @@ class MQTT : AutoCloseable {
 }
 
 
+
+
+fun exponentialRetryDelayMs(): Sequence<Long> {
+    return generateSequence(500L) { retryIntervalMs ->
+        (retryIntervalMs * 1.5 + Random.nextInt(0, 1000)).toLong().takeIf { it < 60 * 1_000 }
+    }
+}
+
+/** For when you need a temp ID for the duration of an app run */
+val sessionId by lazy {
+    "23456789abcdefghijkmnpqrstuvwxyzABCDEFGHJKLMNPQRSTUVWXYZ".toList().shuffled().take(4).joinToString()
+}

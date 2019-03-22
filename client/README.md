@@ -7,7 +7,7 @@ LeJOS clients are fun!  Fix the brick's IP address in pom.xml, and run maven:dep
 
 To SSH into the robot:
 
-    ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 root@192.168.86.250
+    ssh -oKexAlgorithms=+diffie-hellman-group1-sha1 root@192.168.43.179
     root@EV3:/home/lejos/programs# jrun -cp whiteboardbot-0.0.1-SNAPSHOT-jar-with-dependencies.jar info.benjaminhill.wbb.MainKt
 
 Copying files
