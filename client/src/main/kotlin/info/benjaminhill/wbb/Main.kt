@@ -13,7 +13,7 @@ fun main() {
 
     RemoteControl("https://whiteboardbot.firebaseapp.com/config.json").use {
         it.run()
-        println("Finished Script")
+        LOG.info { "Finished Script" }
     }
 
     LOG.info { "Exiting app normally." }

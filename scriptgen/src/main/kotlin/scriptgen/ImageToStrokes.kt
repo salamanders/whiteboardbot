@@ -57,7 +57,7 @@ class ImageToScribble(fileName: String, private val strokes: Int, private val se
 
 
 fun main() {
-    ImageToScribble("falcon.png", 1_200, 8_000, 0.2).use {
+    ImageToScribble("sw.png", 1_200, 8_000, 0.2).use {
         it.run()
     }
 }

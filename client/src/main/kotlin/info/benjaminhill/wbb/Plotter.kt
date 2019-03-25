@@ -1,20 +1,31 @@
 package info.benjaminhill.wbb
 
+import info.benjaminhill.wbb.NormalVector2D.Companion.checkDiagonalsNormal
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.runBlocking
 import lejos.hardware.Battery
 import lejos.hardware.Button
 import lejos.hardware.lcd.LCD
 import lejos.hardware.motor.EV3LargeRegulatedMotor
 import lejos.hardware.port.MotorPort
 import mu.KotlinLogging
+import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
+import kotlin.coroutines.CoroutineContext
 
 /**
- * The drawing area is a 1x1 square
+ * The drawing area is a 1.0 x 1.0 square
  * "forwards" (positive tacho) unrolls and extends string, "backwards" retracts
- * Position state is stored in the actual tachoCounts of each motor
+ * Position state is stored in the actual tachoCounts of each motor (degrees rotated)
  * Calibration is number of tachos along top edge, and fully retracted is the upper-left or right corner
+ * Starts uncalibrated, only able to uncalibratedMove turn spools
  */
-class Plotter : AutoCloseable {
-    // Starts uncalibrated
+class Plotter : AutoCloseable, CoroutineScope {
+
+    private val job = Job()
+    override val coroutineContext: CoroutineContext get() = job + backgroundPool
+
     private val spoolLeft = EV3LargeRegulatedMotor(MotorPort.A).apply {
         speed = MAX_SPEED
     }
@@ -33,15 +44,15 @@ class Plotter : AutoCloseable {
         LCD.clear()
 
         println("Mark Upper Left")
-        check(manualMove()) { "Bailed on UL calibration." }
+        check(uncalibratedMove()) { "Bailed on UL calibration." }
         spoolLeft.resetTachoCount()
 
         println("Find Upper Right")
-        check(manualMove()) { "Bailed on UR calibration." }
+        check(uncalibratedMove()) { "Bailed on UR calibration." }
         spoolRight.resetTachoCount()
 
         edgeTachoCount = spoolLeft.tachoCount.toDouble()
-        spoolLeft.synchronizeWith(arrayOf(spoolRight))
+        // spoolLeft.synchronizeWith(arrayOf(spoolRight))
 
         LOG.info { "Drawing scale: edge:$edgeTachoCount" }
         LOG.info { "Start len: ${spoolLeft.tachoCount}, ${spoolRight.tachoCount}" }
@@ -58,50 +69,116 @@ class Plotter : AutoCloseable {
             return hypotToXY(normalStrLenLeft, normalStrLenRight)
         }
         set(normalLoc) {
-            val (currentNormalLenLeft, currentNormalLenRight) = xyToHypot(location)
-            val (targetNormalLenLeft, targetNormalLenRight) = xyToHypot(normalLoc)
-
-            val deltaNormalLeft = Math.abs(targetNormalLenLeft - currentNormalLenLeft)
-            val deltaNormalRight = Math.abs(targetNormalLenRight - currentNormalLenRight)
-
             LCD.setPixel((normalLoc.x * LCD.SCREEN_WIDTH).toInt(), (normalLoc.y * LCD.SCREEN_HEIGHT).toInt(), 1)
-
-            // Diagonals should arrive at the same time.
-            // 1. max out the speeds
-            spoolLeft.speed = MAX_SPEED
-            spoolRight.speed = MAX_SPEED
-
-            // Slow down the one that moves a shorter distance
-            if (deltaNormalLeft < deltaNormalRight) {
-                spoolLeft.speed = (MAX_SPEED * (deltaNormalLeft / deltaNormalRight)).toInt()
-            }
-            if (deltaNormalLeft > deltaNormalRight) {
-                spoolRight.speed = (MAX_SPEED * (deltaNormalRight / deltaNormalLeft)).toInt()
-            }
-
-            val targetTachoLeft = (targetNormalLenLeft * edgeTachoCount).toInt()
-            val targetTachoRight = (targetNormalLenRight * edgeTachoCount).toInt()
-
-            // Hyperextension is bad (ran out of string).  So is grinding gears.
-            check(targetTachoLeft in 0..(edgeTachoCount * 1.5).toInt())
-            check(targetTachoRight in 0..(edgeTachoCount * 1.5).toInt())
-
-            LOG.debug { "MOVE $location to $normalLoc; left: ${spoolLeft.tachoCount} to $targetTachoLeft; right: ${spoolRight.tachoCount} to $targetTachoRight" }
-            spoolLeft.startSynchronization()
-
-            spoolLeft.rotateTo(targetTachoLeft)
-            spoolRight.rotateTo(targetTachoRight)
-
-            spoolLeft.endSynchronization()
-
+            LOG.debug { "location:($location to $normalLoc)" }
+            asyncMoveToLocation(normalLoc)
             spoolLeft.waitComplete()
             spoolRight.waitComplete() // TODO: Account for different acceleration.  OR maybe wait for the first?
         }
 
-    /** Ignores tacho limits.
+    /**
+     * Race around the points, never stopping.
+     * Short hops reduce curve issues.
+     * Better hope you don't overshoot and wobble forever
+     * TODO: Slow down if very close
+     */
+    fun fastDraw(points: List<NormalVector2D>) = runBlocking {
+
+        points.forEachIndexed { idx, targetLocation ->
+            var timeOfLastLog: Long = 0
+            var moveLoops = 0
+            do {
+                moveLoops++
+
+                val remainingMove = targetLocation.subtract(location)
+                val remainingDist = remainingMove.norm
+
+                // Look max of 1/10th of the board away to help with bad curves
+                val shortMove = if (remainingDist > 10 * CLOSE_TO_TARGET) {
+                    remainingMove.normalize().scalarMultiply(10 * CLOSE_TO_TARGET)
+                } else {
+                    remainingMove
+                }
+
+                // Early check to avoid the last delay
+                if (remainingDist < CLOSE_TO_TARGET) {
+                    break
+                }
+
+                val shortTarget = location.add(shortMove)
+                asyncMoveToLocation(shortTarget)
+                System.currentTimeMillis().let { now ->
+
+                    // First time and every 3 seconds thereafter
+                    if (now - timeOfLastLog > 3_000) {
+                        timeOfLastLog = now
+
+                        LOG.debug {
+                            "FMOVE $idx (loop:$moveLoops)," +
+                                    " from:$location to:$targetLocation," +
+                                    " dist:${remainingDist.str}," +
+                                    " lspeed:${spoolLeft.speed} rspeed:${spoolRight.speed}," +
+                                    " ltacho:${spoolLeft.tachoCount} to ${spoolLeft.limitAngle} " +
+                                    " rtacho:${spoolRight.tachoCount} to ${spoolRight.limitAngle}"
+                        }
+                    }
+                }
+                delay(50)
+
+                // TODO: Better way of sensing overshoots
+            } while (remainingDist > CLOSE_TO_TARGET)
+        }
+        LOG.info { "FMOVE completed all ${points.size} steps" }
+        spoolLeft.flt()
+        spoolRight.flt()
+    }
+
+    /**
+     * Doesn't wait for the move to end
+     * @param target will be normalized
+     */
+    private fun asyncMoveToLocation(target: Vector2D) {
+        // Guaranteed to be normalized
+
+        val (currentNormalLenLeft, currentNormalLenRight) = xyToHypot(location)
+        val (targetNormalLenLeft, targetNormalLenRight) = xyToHypot(target)
+        val deltaNormalLeft = Math.abs(targetNormalLenLeft - currentNormalLenLeft)
+        val deltaNormalRight = Math.abs(targetNormalLenRight - currentNormalLenRight)
+
+        // Slow down the one closer to the goal so diagonals arrive at the same time.
+        when {
+            deltaNormalLeft < deltaNormalRight -> {
+                spoolLeft.speed = (MAX_SPEED * (deltaNormalLeft / deltaNormalRight)).toInt()
+                spoolRight.speed = MAX_SPEED
+            }
+            deltaNormalLeft > deltaNormalRight -> {
+                spoolLeft.speed = MAX_SPEED
+                spoolRight.speed = (MAX_SPEED * (deltaNormalRight / deltaNormalLeft)).toInt()
+            }
+            else -> {
+                spoolLeft.speed = MAX_SPEED
+                spoolRight.speed = MAX_SPEED
+            }
+        }
+        val targetTachoLeft = (targetNormalLenLeft * edgeTachoCount).toInt()
+        val targetTachoRight = (targetNormalLenRight * edgeTachoCount).toInt()
+
+        // Hyperextension (running out of string) is bad.  So is grinding gears.
+        check(targetTachoLeft in 0..(edgeTachoCount * 1.5).toInt())
+        check(targetTachoRight in 0..(edgeTachoCount * 1.5).toInt())
+
+        //spoolLeft.startSynchronization()
+        spoolLeft.rotateTo(targetTachoLeft, true)
+        spoolRight.rotateTo(targetTachoRight, true)
+        //spoolLeft.endSynchronization()
+    }
+
+
+    /**
+     * Ignores tacho limits.
      * @return true if OK to continue
      */
-    private fun manualMove(): Boolean {
+    private fun uncalibratedMove(): Boolean {
         val adjustDegrees = 360
         while (true) {
             when (Button.waitForAnyPress()) {
@@ -157,26 +234,21 @@ class Plotter : AutoCloseable {
     companion object {
         private val LOG = KotlinLogging.logger {}
 
-        private const val MAX_SPEED = 180
-
-        private fun checkNormalizedStringLengths(hypotenuseLeft: Double, hypotenuseRight: Double) {
-            check(hypotenuseLeft >= 0) { "normalized string unexpected hypotenuseLeft:${hypotenuseLeft.str}" }
-            check(hypotenuseLeft < 1.5) { "normalized string unexpected hypotenuseLeft:${hypotenuseLeft.str}" }
-            check(hypotenuseRight >= 0) { "normalized string unexpected hypotenuseRight:${hypotenuseLeft.str}" }
-            check(hypotenuseRight < 1.5) { "normalized string unexpected hypotenuseRight:${hypotenuseRight.str}" }
-        }
+        private const val MAX_SPEED = 180 // Starts getting loud > 180.
+        private const val CLOSE_TO_TARGET = 0.005
 
         /**
          * Normalized
+         * @param target could be considered Normalised
          * @link https://www.marginallyclever.com/2012/02/drawbot-overview/ for diagram
          */
-        fun xyToHypot(target: NormalVector2D): Pair<Double, Double> {
-
+        fun xyToHypot(target: Vector2D): Pair<Double, Double> {
+            NormalVector2D.checkNormal(target)
             val hypotenuseLeft = Math.sqrt(target.x * target.x + target.y * target.y)
             val xb = 1.0 - target.x  // same as V-M2 in the picture
             val hypotenuseRight = Math.sqrt(xb * xb + target.y * target.y)
 
-            checkNormalizedStringLengths(hypotenuseLeft, hypotenuseRight)
+            checkDiagonalsNormal(hypotenuseLeft, hypotenuseRight)
 
             return hypotenuseLeft to hypotenuseRight
         }
@@ -185,7 +257,7 @@ class Plotter : AutoCloseable {
          * Heron's formula https://www.wikihow.com/Find-the-Height-of-a-Triangle
          */
         fun hypotToXY(hypotenuseLeft: Double, hypotenuseRight: Double): NormalVector2D {
-            checkNormalizedStringLengths(hypotenuseLeft, hypotenuseRight)
+            checkDiagonalsNormal(hypotenuseLeft, hypotenuseRight)
 
             val topEdge = 1.0
             require(topEdge <= hypotenuseLeft + hypotenuseRight + 0.05) { "Not a happy T triangle: 1.0, ${hypotenuseLeft.str}, ${hypotenuseRight.str}" }

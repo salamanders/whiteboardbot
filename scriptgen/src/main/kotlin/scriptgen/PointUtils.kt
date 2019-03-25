@@ -5,7 +5,6 @@ import org.imgscalr.Scalr
 import java.awt.image.BufferedImage
 import java.io.File
 import javax.imageio.ImageIO
-
 import kotlin.math.roundToInt
 
 operator fun Vector2D.component1(): kotlin.Double = this.x
@@ -53,3 +52,4 @@ fun BufferedImage.getLum(x: Int, y: Int): Float {
 /** Shorter round for the logs */
 val Double.str: String
     get() = "%.3f".format(this)
+

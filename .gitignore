@@ -197,4 +197,4 @@ $RECYCLE.BIN/
 *.lnk
 
 # End of https://www.gitignore.io/api/osx,java,linux,kotlin,windows,intellij,firebase
-scriptgen/target/classes/META-INF/scriptgen.kotlin_module
+

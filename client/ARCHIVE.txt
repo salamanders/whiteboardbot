@@ -1,4 +1,16 @@
-      headingOffsetDeg -= (360*arcStepPct)
+ fun main() {
+     var pctScale = 1.0
+     for (circle in 1..20) {
+         for (deg in 1..360 step 5) {
+             pctScale -= (1.0 / (20 * (360 / 5)))
+             val p = Vector2D(
+                     (pctScale * Math.sin(Math.toRadians(deg.toDouble()))) / 2 + 0.5,
+                     (pctScale * Math.cos(Math.toRadians(deg.toDouble()))) / 2 + 0.5
+             )
+             println("$p,")
+         }
+     }
+ }     headingOffsetDeg -= (360*arcStepPct)
                 // don't take sharp left turns
                 /*
                 if (hopSize < 3 && headingOffsetDeg < 0) {

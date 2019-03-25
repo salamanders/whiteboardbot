@@ -1,19 +1,15 @@
 package scriptgen
 
-import mu.KotlinLogging
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 import java.awt.BasicStroke
 import java.awt.Color
-import kotlin.math.roundToInt
 
 /**
- * Smaller step pixel-eating algo that tries to spiral in on a drawing
+ * Smaller step pixel-eating algo that tries to "eat towards the middle" on a drawing
  * Much like a line-following bot
  */
 class ImageToTrace(fileName: String) : ImageToX(fileName) {
 
-    private val diagonal = Math.sqrt((imageDimension.width * imageDimension.width + imageDimension.height * imageDimension.height).toDouble()).roundToInt()
-    private val center = Vector2D(imageDimension.width / 2.0, imageDimension.height / 2.0)
     private val zeroDeg = Vector2D(1.0, 0.0)
     /**
      * Fold back along yourself, then counter-clockwise look for first good pixel
@@ -49,7 +45,7 @@ class ImageToTrace(fileName: String) : ImageToX(fileName) {
             }
 
         }
-        LOG.warn { "Couldn't find a next step" }
+        LOG.warn { "Halting because couldn't find a next step from $currentLoc" }
         return null
     }
 
@@ -59,21 +55,44 @@ class ImageToTrace(fileName: String) : ImageToX(fileName) {
 
         // Start in upper-right
         var loc = Vector2D((imageDimension.width - 1).toDouble(), 0.0)
+        val allPoints = mutableListOf<Vector2D>()
 
-        (0..200_000).forEach { step ->
-            getNextLocation(loc)?.let { (nextLoc, color) ->
+        do {
+            val nextLocation = getNextLocation(loc)
+            nextLocation?.let { (nextLoc, color) ->
                 inputG2d.color = color
                 inputG2d.drawLine(loc.ix, loc.iy, nextLoc.ix, nextLoc.iy)
-                outputG2d.drawLine(loc.ix, loc.iy, nextLoc.ix, nextLoc.iy)
                 loc = nextLoc
-            } ?: return
+                allPoints.add(loc)
+            }
+        } while (nextLocation != null)
+
+        outputG2d.apply {
+            color = Color.CYAN
+            stroke = BasicStroke(3f)
         }
+
+        allPoints.zipWithNext { a, b ->
+            outputG2d.drawLine(a.ix, a.iy, b.ix, b.iy)
+        }
+
+        script.addAll(simplifyPath(allPoints, 4000))
+        //script.addAll(visvalingamWhyatt(allPoints, 4000))
+
+        outputG2d.apply {
+            color = Color.BLACK
+            stroke = BasicStroke(1f)
+        }
+        script.zipWithNext { a, b ->
+            outputG2d.drawLine(a.ix, a.iy, b.ix, b.iy)
+        }
+
+        LOG.info { "Found ${allPoints.size} (cyan) reduced to ${script.size} (black)" }
     }
 }
 
-val LOG = KotlinLogging.logger {}
 
 fun main() {
-    ImageToTrace("falcon.png").use { it.run() }
+    ImageToTrace("sw.png").use { it.run() }
 }
 

@@ -28,25 +28,13 @@ class RemoteControl(scriptURL: String) : AutoCloseable, Runnable, CoroutineScope
     override fun run() = runBlocking {
         LOG.info { "FRAME:START" }
         script.start()
-        // Already at plotter.location = WPoint(1.0, 0.0)
-
-        //plotter.location = WPoint(1.0, 1.0)
-        //plotter.location = WPoint(0.0, 1.0)
-        //plotter.location = WPoint(0.0, 0.0)
+        plotter.location = NormalVector2D(1.0, 0.0)
+        plotter.location = NormalVector2D(1.0, 1.0)
+        plotter.location = NormalVector2D(0.0, 1.0)
+        plotter.location = NormalVector2D(0.0, 0.0)
         LOG.info { "FRAME:END" }
-
-        runScript(script.await())
+        plotter.fastDraw(script.await())
         Unit
-    }
-
-    private fun runScript(path: List<NormalVector2D>) {
-        LOG.info { "RC plotting ${path.size} points." }
-        path.forEachIndexed { idx, point ->
-            plotter.location = point
-            if (idx % 100 == 0) {
-                LOG.info { "Script Step $idx (${(idx * 100) / path.size}%)" }
-            }
-        }
     }
 
     override fun close() {
