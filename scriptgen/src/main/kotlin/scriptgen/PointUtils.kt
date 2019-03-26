@@ -1,10 +1,7 @@
 package scriptgen
 
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
-import org.imgscalr.Scalr
 import java.awt.image.BufferedImage
-import java.io.File
-import javax.imageio.ImageIO
 import kotlin.math.roundToInt
 
 operator fun Vector2D.component1(): kotlin.Double = this.x
@@ -29,14 +26,6 @@ fun Vector2D.getPointsAlongLine(other: Vector2D): List<Vector2D> {
     }
 }
 
-fun getImage(fileName: String, res: Int = 500): BufferedImage {
-    val resource = fileName.let {
-        object {}.javaClass::class.java.getResource(it)
-                ?: File("scriptgen/src/main/resources/$it").toURI().toURL()!!
-    }
-    return Scalr.resize(ImageIO.read(resource)!!, Scalr.Method.ULTRA_QUALITY, res, res)!!
-}
-
 fun BufferedImage.getLum(loc: Vector2D): Float = getLum(loc.ix, loc.iy)
 
 fun BufferedImage.getLum(x: Int, y: Int): Float {
@@ -51,5 +40,5 @@ fun BufferedImage.getLum(x: Int, y: Int): Float {
 
 /** Shorter round for the logs */
 val Double.str: String
-    get() = "%.3f".format(this)
+    get() = "%.4f".format(this)
 

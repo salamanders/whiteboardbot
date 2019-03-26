@@ -24,48 +24,24 @@ fun fileToPath(svgXmlFile: File): List<Vector2D> {
     return points
 }
 
-/** Scale proportionally to fit inside a unit sq, trimming to shape */
-fun normalizePoints(points: List<Vector2D>): List<NormalVector2D> {
-    val globalMin = Vector2D(points.minBy { it.x }!!.x, points.minBy { it.y }!!.y)
-    val globalMax = Vector2D(points.maxBy { it.x }!!.x, points.maxBy { it.y }!!.y)
-
-    val xScale = 1 / (globalMax.x - globalMin.x)
-    val yScale = 1 / (globalMax.y - globalMin.y)
-    val scaleFactor = Math.min(xScale, yScale)
-
-    val scaled = points.map {
-        it.subtract(globalMin).scalarMultiply(scaleFactor)!!
-    }.map {
-        NormalVector2D(it.x, it.y)
-    }
-
-    val scaledMax = NormalVector2D(scaled.maxBy { it.x }!!.x, scaled.maxBy { it.y }!!.y)
-    val centeringOffset = Vector2D((1 - scaledMax.x) / 2, (1 - scaledMax.y) / 2)
-
-    return scaled.map {
-        it.add(centeringOffset)
-    }.map {
-        NormalVector2D(it.x, it.y)
-    }
-}
-
-fun simplifyPath(points: List<Vector2D>, maxSize: Int = 1_000): List<Vector2D> {
+fun ramerDouglasPeucker(points: List<Vector2D>, maxSize: Int = 1_000): List<Vector2D> {
+    LOG.info { "ramerDouglasPeucker from ${points.size} to $maxSize" }
     var maxDelta = 0.01
     var iterations = 0
-    val smoothed = mutableListOf<Vector2D>()
-    smoothed.addAll(points)
-    while (smoothed.size > maxSize) {
+    val result = points.toMutableList()
+    result.addAll(points)
+    while (result.size > maxSize) {
         iterations++
-        smoothed.clear()
-        smoothed.addAll(ramerDouglasPeucker(points, maxDelta))
+        result.clear()
+        result.addAll(ramerDouglasPeuckerRecursion(points, maxDelta))
         maxDelta *= 1.05
     }
     LOG.info { "maxDelta of $maxDelta is under size cap $maxSize after $iterations passes." }
-    return smoothed
+    return result
 }
 
-/** Hacky cache.  Not sure if it actually helps! */
-fun visvalingamWhyatt(points: List<Vector2D>, maxSize: Int): List<Vector2D> {
+/** Iteratively delete smallest 3-point triangles.  Could do lots of caching, but meh. */
+fun visvalingamWhyatt(points: List<Vector2D>, maxSize: Int = 1_000): List<Vector2D> {
     val result = points.toMutableList()
     while (result.size > maxSize) {
         if (result.size % 1000 == 0) {
@@ -83,10 +59,11 @@ fun visvalingamWhyatt(points: List<Vector2D>, maxSize: Int): List<Vector2D> {
 
 
 /**
- * Delete the most boring midpoints.
+ * Delete any midpoints that aren't "interesting enough" to fall outside the error bar
+ * Recursively subdivides
  * @see https://en.wikipedia.org/wiki/Ramer%E2%80%93Douglas%E2%80%93Peucker_algorithm
  */
-private fun ramerDouglasPeucker(points: List<Vector2D>, maxDistanceAllowed: Double): List<Vector2D> {
+private fun ramerDouglasPeuckerRecursion(points: List<Vector2D>, maxDistanceAllowed: Double): List<Vector2D> {
     if (points.size <= 2) {
         return points
     }
@@ -104,8 +81,8 @@ private fun ramerDouglasPeucker(points: List<Vector2D>, maxDistanceAllowed: Doub
     return if (maxDist < maxDistanceAllowed) {
         listOf(points.first(), points.last())
     } else {
-        val leftSide = ramerDouglasPeucker(points.subList(0, maxIdx + 1), maxDistanceAllowed)
-        val rightSide = ramerDouglasPeucker(points.subList(maxIdx, points.size), maxDistanceAllowed)
+        val leftSide = ramerDouglasPeuckerRecursion(points.subList(0, maxIdx + 1), maxDistanceAllowed)
+        val rightSide = ramerDouglasPeuckerRecursion(points.subList(maxIdx, points.size), maxDistanceAllowed)
         leftSide.plus(rightSide.drop(1))
     }
 }

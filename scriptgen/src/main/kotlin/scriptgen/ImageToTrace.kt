@@ -67,6 +67,7 @@ class ImageToTrace(fileName: String) : ImageToX(fileName) {
             }
         } while (nextLocation != null)
 
+        /*
         outputG2d.apply {
             color = Color.CYAN
             stroke = BasicStroke(3f)
@@ -76,8 +77,7 @@ class ImageToTrace(fileName: String) : ImageToX(fileName) {
             outputG2d.drawLine(a.ix, a.iy, b.ix, b.iy)
         }
 
-        script.addAll(simplifyPath(allPoints, 4000))
-        //script.addAll(visvalingamWhyatt(allPoints, 4000))
+        script.addAll(ramerDouglasPeucker(allPoints, 5000))
 
         outputG2d.apply {
             color = Color.BLACK
@@ -86,6 +86,7 @@ class ImageToTrace(fileName: String) : ImageToX(fileName) {
         script.zipWithNext { a, b ->
             outputG2d.drawLine(a.ix, a.iy, b.ix, b.iy)
         }
+         */
 
         LOG.info { "Found ${allPoints.size} (cyan) reduced to ${script.size} (black)" }
     }

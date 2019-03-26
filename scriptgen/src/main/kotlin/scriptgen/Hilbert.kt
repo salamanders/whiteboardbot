@@ -25,7 +25,7 @@ class Hilbert(fileName: String) : ImageToX(fileName) {
         val offset = angleToVector2D(rad).scalarMultiply(stepSize)
         val nextLocation = location.add(offset)
         LOG.info { "$location -> $nextLocation" }
-        outputG2d.drawLine(location.ix, location.iy, nextLocation.ix, nextLocation.iy)
+        script.add(location)
         location = nextLocation
     }
 

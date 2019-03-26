@@ -9,7 +9,12 @@ import kotlin.math.roundToInt
  * Decimate an image by drawing white lines over it.
  * Each white line is the "most beneficial" next step (based on dark luminosity removed)
  */
-class ImageToScribble(fileName: String, private val strokes: Int, private val searchSteps: Int, maxPctHop: Double) : ImageToX(fileName) {
+class ImageToScribble(
+        fileName: String,
+        private val strokes: Int,
+        private val searchSteps: Int,
+        maxPctHop: Double
+) : ImageToX(fileName, inputRes = 600) {
 
     private val maxPixelHop = (maxPctHop * Math.min(imageDimension.width, imageDimension.height)).roundToInt()
 
@@ -49,7 +54,6 @@ class ImageToScribble(fileName: String, private val strokes: Int, private val se
         for (i in 0..strokes) {
             val nextLoc = getNextLocation(script.last())
             inputG2d.drawLine(script.last().ix, script.last().iy, nextLoc.ix, nextLoc.iy)
-            outputG2d.drawLine(script.last().ix, script.last().iy, nextLoc.ix, nextLoc.iy)
             script.add(nextLoc)
         }
     }
@@ -57,7 +61,7 @@ class ImageToScribble(fileName: String, private val strokes: Int, private val se
 
 
 fun main() {
-    ImageToScribble("sw.png", 1_200, 8_000, 0.2).use {
+    ImageToScribble("whale.png", 1_000, 10_000, 0.2).use {
         it.run()
     }
 }

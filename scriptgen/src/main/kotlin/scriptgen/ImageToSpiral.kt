@@ -3,19 +3,18 @@ package scriptgen
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 
 
-class ImageToSpiral(fileName: String, private val spaceBetweenSpins: Double = 7.0) : ImageToX(fileName) {
-
+class ImageToSpiral(fileName: String, private val spaceBetweenSpins: Double = 5.0) : ImageToX(fileName) {
 
     override fun run() {
+        val hopSize = 2
         val maxRadius = Math.sqrt(center.x * center.x + center.y * center.y)
         val spiralPoints = spiral(maxRadius, spaceBetweenSpins)
         LOG.info { "Plotting ${spiralPoints.size} points" }
 
         spiralPoints
                 .map { it.add(center) }
-                .distinctBy { it.ix / 4 to it.iy / 4 }
+                .distinctBy { it.ix / hopSize to it.iy / hopSize }
                 .filter { it.ix in 0 until inputImage.width && it.iy in 0 until inputImage.height }
-                // .filter { inputImage.getLum(it) < .999 }
                 .zipWithNext { a, b ->
                     //outputG2d.drawLine(a.ix, a.iy, b.ix, b.iy)
                     // "Real" would be to average pixel lum in the little pie slice.  Meh.
@@ -23,8 +22,8 @@ class ImageToSpiral(fileName: String, private val spaceBetweenSpins: Double = 7.
                     val inputDark = 1 - inputImage.getLum(a).toDouble()
                     val squigToCenter = a.subtract(center).normalize().negate().scalarMultiply(inputDark * spaceBetweenSpins)
                     val squigged = a.add(squigToCenter)
-                    outputG2d.drawLine(a.ix, a.iy, squigged.ix, squigged.iy)
-                    outputG2d.drawLine(squigged.ix, squigged.iy, b.ix, b.iy)
+                    script.add(a)
+                    script.add(squigged)
                 }
     }
 
@@ -53,7 +52,7 @@ class ImageToSpiral(fileName: String, private val spaceBetweenSpins: Double = 7.
 
 
 fun main() {
-    ImageToSpiral("xwing.png").use {
+    ImageToSpiral("whale.png").use {
         it.run()
     }
 }
