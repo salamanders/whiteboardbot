@@ -1,41 +1,29 @@
 package scriptgen
 
-import info.benjaminhill.wbb.NormalVector2D
-import kotlinx.coroutines.*
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.runBlocking
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
-import java.awt.*
+import java.awt.Point
 import java.awt.geom.Line2D
-import java.io.File
-import java.util.concurrent.Executors
 import java.util.concurrent.ThreadLocalRandom
-import javax.imageio.ImageIO
 import kotlin.math.roundToInt
 
 
 /**
  * Decimate an image by drawing white lines over it.
  * Each white line is the "most beneficial" next step (based on dark luminosity removed)
- * Doesn't use normal lum array
+ * Is input image scale dependent
  */
 class ImageToStrokes(fileName: String,
                      private val strokes: Int,
                      private val searchSteps: Int,
                      private val maxPctHop: Double
-) : Runnable, AutoCloseable {
-    private val dispatcher = Executors.newFixedThreadPool(Runtime.getRuntime().availableProcessors()).asCoroutineDispatcher()
+) : AbstractImageToX(fileName) {
 
-    private val inputBi = ImageIO.read(File("scriptgen/in/$fileName").toURI().toURL())!!
-    private val inputDim = Rectangle(inputBi.width, inputBi.height)
-    private val inputG2D = inputBi.createGraphics()!!.apply {
-        setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
-        color = Color.WHITE
-        stroke = BasicStroke(1.5f)  // a few mm wide pen?
-    }
-    private val script = mutableListOf<Point>()
-
-    private fun getNextLocation(origin: Point): Point = runBlocking(dispatcher) {
+    override fun getNextLocation(origin: Vector2D): Vector2D = runBlocking(dispatcher) {
         val largestHop = maxPctHop * Math.max(inputDim.width, inputDim.height)
-
+        val pOrigin = Point(origin.x.roundToInt(), origin.y.roundToInt())
         val samples: List<Deferred<Pair<Point, Double>?>> = (0..searchSteps).map {
             async {
                 // Gaussian random hops
@@ -43,8 +31,8 @@ class ImageToStrokes(fileName: String,
                         (origin.x + ThreadLocalRandom.current().nextGaussian() * largestHop).roundToInt(),
                         (origin.y + ThreadLocalRandom.current().nextGaussian() * largestHop).roundToInt()
                 )
-                if (inputDim.contains(nextPotentialPoint) && origin.distance(nextPotentialPoint) > 2) {
-                    val line = Line2D.Double(origin, nextPotentialPoint)
+                if (inputDim.contains(nextPotentialPoint) && pOrigin.distance(nextPotentialPoint) > 2) {
+                    val line = Line2D.Double(pOrigin, nextPotentialPoint)
                     val avgInk = line.points().map { point ->
                         1 - inputBi.getLum(point.x.toInt(), point.y.toInt())
                     }.map { it * it }.average()
@@ -57,29 +45,22 @@ class ImageToStrokes(fileName: String,
 
         val doneSamples = samples.mapNotNull { it.await() }
         val (bestPt, _) = doneSamples.maxBy { it.second }!!
-        inputG2D.drawLine(origin.x, origin.y, bestPt.x, bestPt.y)
-        bestPt
+        // White out the current move
+        inputG2D.drawLine(pOrigin.x, pOrigin.y, bestPt.x, bestPt.y)
+        Vector2D(bestPt.x.toDouble(), bestPt.y.toDouble())
     }
 
     override fun run() {
-        script.add(Point(inputDim.width / 2, inputDim.height / 2)) // Start in center
+        script.add(Vector2D(inputDim.width / 2.0, inputDim.height / 2.0)) // Start in center
         for (i in 0..strokes) {
             script.add(getNextLocation(script.last()))
         }
     }
-
-    override fun close() {
-        inputG2D.dispose()
-        val name = this.javaClass.simpleName
-        ImageIO.write(inputBi, "png", File("scriptgen/out/decimated_$name.png"))
-        ImageToX.writeScriptFiles(NormalVector2D.normalizePoints(script.map { Vector2D(it.x.toDouble(), it.y.toDouble()) }), name)
-        dispatcher.close()
-    }
 }
 
-fun main() {
-    ImageToStrokes("sundar5.png", 2_000, 20_000, 0.5).use {
-        it.run()
-    }
-}
+fun main() = ImageToStrokes(
+        "sundar5.png",
+        2_000,
+        20_000,
+        0.5).use { it.run() }
 

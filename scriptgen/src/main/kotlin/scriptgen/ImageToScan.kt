@@ -2,7 +2,11 @@ package scriptgen
 
 import info.benjaminhill.wbb.NormalVector2D
 
-class ImageToScan(fileName: String) : ImageToX(fileName) {
+/**
+ * Left-to-right pass
+ * TODO: find a path along edges rather than bridging gaps
+ */
+class ImageToScan(fileName: String) : AbstractImageToScaleFree(fileName) {
 
     fun run() {
         val xStep = 5.0 / 1000
@@ -47,6 +51,5 @@ class ImageToScan(fileName: String) : ImageToX(fileName) {
         }
     }
 }
-
 
 fun main() = ImageToScan("shark2.png").use { it.run() }

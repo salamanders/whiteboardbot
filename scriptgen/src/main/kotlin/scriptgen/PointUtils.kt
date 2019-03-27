@@ -1,6 +1,7 @@
 package scriptgen
 
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
+import java.awt.Rectangle
 import java.awt.geom.Line2D
 import java.awt.geom.Point2D
 import java.awt.image.BufferedImage
@@ -9,6 +10,8 @@ operator fun Vector2D.component1(): kotlin.Double = this.x
 operator fun Vector2D.component2(): kotlin.Double = this.y
 
 fun angleToVector2D(rad: Double) = Vector2D(Math.cos(rad), Math.sin(rad))
+
+fun Rectangle.contains(v: Vector2D): Boolean = contains(v.x.toInt(), v.y.toInt())
 
 fun BufferedImage.getLum(x: Int, y: Int): Float {
     require(x in 0 until width) { "x:$x outside of $width x $height" }

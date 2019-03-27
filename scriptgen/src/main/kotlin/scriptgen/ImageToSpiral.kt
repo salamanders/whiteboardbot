@@ -4,10 +4,10 @@ import info.benjaminhill.wbb.NormalVector2D
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 
 
-class ImageToSpiral(fileName: String, private val numberOfSpins: Int) : ImageToX(fileName) {
+class ImageToSpiral(fileName: String, private val numberOfSpins: Int) : AbstractImageToScaleFree(fileName) {
 
     fun run() {
-        val res = 500 // for distinct points
+        val res = 500 // for compression removing identical spiral points
         val center = NormalVector2D(.5, .5)
 
         val spiralPoints = unitSpiral(numberOfSpins).map {
@@ -27,26 +27,14 @@ class ImageToSpiral(fileName: String, private val numberOfSpins: Int) : ImageToX
             script.add(a)
             val ink = getInk(a)
             if (ink > .01) {
-                val squiggle = a.subtract(NormalVector2D(.5, .5)).normalize().scalarMultiply(spaceBetweenSpins * ink).add(a)
+                val squiggleSize = spaceBetweenSpins * ink * 1.5
+                val squiggle = a.subtract(NormalVector2D(.5, .5)).normalize().scalarMultiply(squiggleSize).add(a)
                 if (NormalVector2D.isNormal(squiggle)) {
                     script.add(NormalVector2D.toNormal(squiggle))
                 }
             }
 
         }
-        /*
-
-
-
-                    val inputDark =
-                    if (inputDark > 0.0001) {
-                        val squigToCenter = a.subtract(center).normalize().negate().scalarMultiply(inputDark * spaceBetweenSpins)
-                        val squigged = NormalVector2D.toNormal(a.add(squigToCenter))
-                        script.add(squigged)
-                    }
-                }
-
-         */
     }
 
     companion object {
@@ -63,10 +51,6 @@ class ImageToSpiral(fileName: String, private val numberOfSpins: Int) : ImageToX
             }
         }
     }
-
 }
 
-
-fun main() {
-    ImageToSpiral("whale.png", 200).use { it.run() }
-}
+fun main() = ImageToSpiral("whale.png", 100).use { it.run() }

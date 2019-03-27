@@ -15,7 +15,7 @@ import kotlin.math.roundToInt
  * For those who want to slice images into drawing commands.
  * All access to the input and output images are done in a normalized manner (0.0 until 1.0)
  */
-abstract class ImageToX(fileName: String) : AutoCloseable {
+abstract class AbstractImageToScaleFree(fileName: String) : AutoCloseable {
 
     /** A way to get lums from a normalized surface */
     private val inputImageInk: FloatArray

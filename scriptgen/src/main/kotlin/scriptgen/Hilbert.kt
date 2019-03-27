@@ -6,7 +6,7 @@ fun main() {
     Hilbert("xwing6.png").use { it.run() }
 }
 
-class Hilbert(fileName: String) : ImageToX(fileName) {
+class Hilbert(fileName: String) : AbstractImageToScaleFree(fileName) {
     fun run() {
         val maxDepth = 7
         recurse(maxDepth, 90)
