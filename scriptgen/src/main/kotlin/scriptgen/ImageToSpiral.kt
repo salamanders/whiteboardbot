@@ -1,49 +1,65 @@
 package scriptgen
 
+import info.benjaminhill.wbb.NormalVector2D
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 
 
-class ImageToSpiral(fileName: String, private val spaceBetweenSpins: Double = 5.0) : ImageToX(fileName) {
+class ImageToSpiral(fileName: String, private val numberOfSpins: Int) : ImageToX(fileName) {
 
-    override fun run() {
-        val hopSize = 2
-        val maxRadius = Math.sqrt(center.x * center.x + center.y * center.y)
-        val spiralPoints = spiral(maxRadius, spaceBetweenSpins)
-        LOG.info { "Plotting ${spiralPoints.size} points" }
+    fun run() {
+        val res = 500 // for distinct points
+        val center = NormalVector2D(.5, .5)
 
-        spiralPoints
-                .map { it.add(center) }
-                .distinctBy { it.ix / hopSize to it.iy / hopSize }
-                .filter { it.ix in 0 until inputImage.width && it.iy in 0 until inputImage.height }
-                .zipWithNext { a, b ->
-                    //outputG2d.drawLine(a.ix, a.iy, b.ix, b.iy)
-                    // "Real" would be to average pixel lum in the little pie slice.  Meh.
-                    // Jog to center
-                    val inputDark = 1 - inputImage.getLum(a).toDouble()
-                    val squigToCenter = a.subtract(center).normalize().negate().scalarMultiply(inputDark * spaceBetweenSpins)
-                    val squigged = a.add(squigToCenter)
-                    script.add(a)
-                    script.add(squigged)
+        val spiralPoints = unitSpiral(numberOfSpins).map {
+            it.add(center)
+        }.filter {
+            NormalVector2D.isNormal(it)
+        }.map {
+            NormalVector2D.toNormal(it)
+        }.distinctBy { (it.x * res).toInt() to (it.y * res).toInt() }
+
+        val spaceBetweenSpins = center.norm / numberOfSpins
+        LOG.info { "Plotting ${spiralPoints.size} points, with gap $spaceBetweenSpins" }
+
+        // Do the spiral, jog to center when you find darkness
+        spiralPoints.forEach { a ->
+            // "Real" would be to average pixel lum in the little pie slice.  Meh.
+            script.add(a)
+            val ink = getInk(a)
+            if (ink > .01) {
+                val squiggle = a.subtract(NormalVector2D(.5, .5)).normalize().scalarMultiply(spaceBetweenSpins * ink).add(a)
+                if (NormalVector2D.isNormal(squiggle)) {
+                    script.add(NormalVector2D.toNormal(squiggle))
                 }
+            }
+
+        }
+        /*
+
+
+
+                    val inputDark =
+                    if (inputDark > 0.0001) {
+                        val squigToCenter = a.subtract(center).normalize().negate().scalarMultiply(inputDark * spaceBetweenSpins)
+                        val squigged = NormalVector2D.toNormal(a.add(squigToCenter))
+                        script.add(squigged)
+                    }
+                }
+
+         */
     }
 
     companion object {
         /**
-         * https://stackoverflow.com/questions/48492980/drawing-an-archimedean-spiral-with-lines-and-tightness-parameters-using-java
-         * Centered at 0,0
-         * "Compresses" by distinct integer pixel locations
+         * -1..1
          */
-        private fun spiral(maxRadius: Double, spaceBetweenSpins: Double): List<Vector2D> {
-            val numberOfSpins = maxRadius / spaceBetweenSpins
-            val numSegments = (2 * Math.PI * maxRadius * numberOfSpins).toInt() // Excessive
-            val radiusDelta = maxRadius / numSegments
-
-            var radius = 0.0
-            return (0 until numSegments).map { segmentNum ->
-                radius += radiusDelta
-                Vector2D(
-                        radius * Math.cos(2.0 * Math.PI * segmentNum.toDouble() / numSegments * numberOfSpins),
-                        radius * Math.sin(2.0 * Math.PI * segmentNum.toDouble() / numSegments * numberOfSpins))
+        private fun unitSpiral(numberOfSpins: Int): List<Vector2D> {
+            val radiusIncreasePerSpin = 1.0 / numberOfSpins
+            return (1 until numberOfSpins * 360).map { deg ->
+                val spinPct = deg / 360.0
+                val radius = spinPct * radiusIncreasePerSpin
+                val rad = Math.toRadians(deg.toDouble())
+                Vector2D(Math.cos(rad), Math.sin(rad)).scalarMultiply(radius)
             }
         }
     }
@@ -52,7 +68,5 @@ class ImageToSpiral(fileName: String, private val spaceBetweenSpins: Double = 5.
 
 
 fun main() {
-    ImageToSpiral("whale.png").use {
-        it.run()
-    }
+    ImageToSpiral("whale.png", 200).use { it.run() }
 }

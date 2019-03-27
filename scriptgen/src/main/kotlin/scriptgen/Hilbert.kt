@@ -1,20 +1,20 @@
 package scriptgen
 
-import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
+import info.benjaminhill.wbb.NormalVector2D
 
 fun main() {
     Hilbert("xwing6.png").use { it.run() }
 }
 
 class Hilbert(fileName: String) : ImageToX(fileName) {
-    override fun run() {
+    fun run() {
         val maxDepth = 7
         recurse(maxDepth, 90)
     }
 
     private var heading = 0
     private val stepSize = 2.0
-    private var location = Vector2D(imageDimension.width / 2.0, imageDimension.height / 2.0)
+    private var location = NormalVector2D(.5, .5)
 
     private fun rotate(deg: Int) {
         heading += deg
@@ -26,7 +26,7 @@ class Hilbert(fileName: String) : ImageToX(fileName) {
         val nextLocation = location.add(offset)
         LOG.info { "$location -> $nextLocation" }
         script.add(location)
-        location = nextLocation
+        location = NormalVector2D.toNormal(nextLocation)
     }
 
     // https://stackoverflow.com/questions/43230399/draw-a-hilbert-curve-by-recursion

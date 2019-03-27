@@ -12,6 +12,29 @@ class NormalVector2D(x: Double, y: Double) : Vector2D(x, y) {
 
     override fun toString(): String = "{\"x\":${x.str}, \"y\":${y.str}}"
 
+    // When the result should also be within normal range
+    fun addN(v: NormalVector2D): NormalVector2D = NormalVector2D.toNormal(super.add(v))
+
+    // When the result should also be within normal range
+    fun subtractN(v: NormalVector2D): NormalVector2D = NormalVector2D.toNormal(super.subtract(v))
+
+    // When the result should also be within normal range
+    fun scalarMultiplyN(a: Double): NormalVector2D = NormalVector2D.toNormal(super.scalarMultiply(a))
+
+    fun normalizeN() = NormalVector2D.toNormal(normalize())
+
+    /** Don't know how many points to get.  How about 20 */
+    fun getPointsAlongLine(other: NormalVector2D): List<NormalVector2D> {
+        val diff = other.subtract(this).normalize()
+        val distance = this.distance(other)
+        return (0..20).map {
+            it / 20.0
+        }.map { pct ->
+            NormalVector2D.toNormal(add(pct * distance, diff))
+        }
+    }
+
+
     companion object {
 
         /** A bit more wiggle room because diagonals can extend longer, but shouldn't go shorter */
@@ -34,18 +57,14 @@ class NormalVector2D(x: Double, y: Double) : Vector2D(x, y) {
             val scaleFactor = Math.min(xScale, yScale)
 
             val scaled = points.map {
-                it.subtract(globalMin).scalarMultiply(scaleFactor)!!
-            }.map {
-                NormalVector2D(it.x, it.y)
+                NormalVector2D.toNormal(it.subtract(globalMin).scalarMultiply(scaleFactor))
             }
 
             val scaledMax = NormalVector2D(scaled.maxBy { it.x }!!.x, scaled.maxBy { it.y }!!.y)
-            val centeringOffset = Vector2D((1 - scaledMax.x) / 2, (1 - scaledMax.y) / 2)
+            val centeringOffset = NormalVector2D((1 - scaledMax.x) / 2, (1 - scaledMax.y) / 2)
 
             return scaled.map {
-                it.add(centeringOffset)
-            }.map {
-                NormalVector2D(it.x, it.y)
+                it.addN(centeringOffset)
             }
         }
 
@@ -57,5 +76,12 @@ class NormalVector2D(x: Double, y: Double) : Vector2D(x, y) {
                     p.y < 1.1
             ) { "non normal point: ${p.x} x ${p.y}" }
         }
+
+        fun isNormal(p: Vector2D) = p.x.isFinite() &&
+                p.y.isFinite() &&
+                p.x >= 0 &&
+                p.x < 1 &&
+                p.y >= 0 &&
+                p.y < 1
     }
 }
