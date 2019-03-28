@@ -26,12 +26,8 @@ class Plotter : AutoCloseable, CoroutineScope {
     private val job = Job()
     override val coroutineContext: CoroutineContext get() = job + backgroundPool
 
-    private val spoolLeft = EV3LargeRegulatedMotor(MotorPort.A).apply {
-        speed = MAX_SPEED
-    }
-    private val spoolRight = EV3LargeRegulatedMotor(MotorPort.D).apply {
-        speed = MAX_SPEED
-    }
+    private val spoolLeft = EV3LargeRegulatedMotor(MotorPort.A)
+    private val spoolRight = EV3LargeRegulatedMotor(MotorPort.D)
 
     /**
      * Get the distance (Also the scale factor of the drawing)
@@ -52,11 +48,14 @@ class Plotter : AutoCloseable, CoroutineScope {
         spoolRight.resetTachoCount()
 
         edgeTachoCount = spoolLeft.tachoCount.toDouble()
-        // spoolLeft.synchronizeWith(arrayOf(spoolRight))
+        spoolLeft.synchronizeWith(arrayOf(spoolRight))
 
         LOG.info { "Drawing scale: edge:$edgeTachoCount" }
         LOG.info { "Start len: ${spoolLeft.tachoCount}, ${spoolRight.tachoCount}" }
         LOG.info { "Start location:$location (UR:{1,0})" }
+
+        spoolLeft.speed = MAX_SPEED
+        spoolRight.speed = MAX_SPEED
     }
 
     /**
@@ -93,19 +92,19 @@ class Plotter : AutoCloseable, CoroutineScope {
                 val remainingMove = targetLocation.subtract(location)
                 val remainingDist = remainingMove.norm
 
-                // Look max of 1/10th of the board away to help with bad curves
-                val shortMove = if (remainingDist > 10 * CLOSE_TO_TARGET) {
-                    remainingMove.normalize().scalarMultiply(10 * CLOSE_TO_TARGET)
+                // Early check to avoid the last delay
+                if (remainingDist < CLOSE_ENOUGH_DELTA) {
+                    break
+                }
+
+                // Look max of 1/20th of the board away to help with bad curves
+                val shortMove = if (remainingDist > .05) {
+                    remainingMove.normalize().scalarMultiply(.05)
                 } else {
                     remainingMove
                 }
 
-                // Early check to avoid the last delay
-                if (remainingDist < CLOSE_TO_TARGET) {
-                    break
-                }
-
-                val shortTarget = location.add(shortMove)
+                val shortTarget = NormalVector2D.toNormal(location.add(shortMove))
                 asyncMoveToLocation(shortTarget)
                 System.currentTimeMillis().let { now ->
 
@@ -123,10 +122,10 @@ class Plotter : AutoCloseable, CoroutineScope {
                         }
                     }
                 }
-                delay(50)
+                delay(30)
 
                 // TODO: Better way of sensing overshoots
-            } while (remainingDist > CLOSE_TO_TARGET)
+            } while (remainingDist >= CLOSE_ENOUGH_DELTA)
         }
         LOG.info { "FMOVE completed all ${points.size} steps" }
         spoolLeft.flt()
@@ -137,8 +136,7 @@ class Plotter : AutoCloseable, CoroutineScope {
      * Doesn't wait for the move to end
      * @param target will be normalized
      */
-    private fun asyncMoveToLocation(target: Vector2D) {
-        // Guaranteed to be normalized
+    private fun asyncMoveToLocation(target: NormalVector2D) {
 
         val (currentNormalLenLeft, currentNormalLenRight) = xyToHypot(location)
         val (targetNormalLenLeft, targetNormalLenRight) = xyToHypot(target)
@@ -167,10 +165,10 @@ class Plotter : AutoCloseable, CoroutineScope {
         check(targetTachoLeft in 0..(edgeTachoCount * 1.5).toInt())
         check(targetTachoRight in 0..(edgeTachoCount * 1.5).toInt())
 
-        //spoolLeft.startSynchronization()
+        spoolLeft.startSynchronization()
         spoolLeft.rotateTo(targetTachoLeft, true)
         spoolRight.rotateTo(targetTachoRight, true)
-        //spoolLeft.endSynchronization()
+        spoolLeft.endSynchronization()
     }
 
 
@@ -234,8 +232,12 @@ class Plotter : AutoCloseable, CoroutineScope {
     companion object {
         private val LOG = KotlinLogging.logger {}
 
-        private const val MAX_SPEED = 180 // Starts getting loud > 180.
-        private const val CLOSE_TO_TARGET = 0.005
+        // Starts getting loud > 180.
+        private const val MAX_SPEED = 180
+
+        // Drawing resolution.  Small enough to keep fine details, but if too small, worry about overshoots.
+        // 6' ~= 200cm, so 1/1000 is 2 mm
+        private const val CLOSE_ENOUGH_DELTA = 1.0 / 1000
 
         /**
          * Normalized
@@ -243,10 +245,10 @@ class Plotter : AutoCloseable, CoroutineScope {
          * @link https://www.marginallyclever.com/2012/02/drawbot-overview/ for diagram
          */
         fun xyToHypot(target: Vector2D): Pair<Double, Double> {
-            NormalVector2D.checkNormal(target)
-            val hypotenuseLeft = Math.sqrt(target.x * target.x + target.y * target.y)
-            val xb = 1.0 - target.x  // same as V-M2 in the picture
-            val hypotenuseRight = Math.sqrt(xb * xb + target.y * target.y)
+            val normalTarget = NormalVector2D.toNormal(target)
+            val hypotenuseLeft = Math.sqrt(normalTarget.x * normalTarget.x + normalTarget.y * normalTarget.y)
+            val xb = 1.0 - normalTarget.x  // same as V-M2 in the picture
+            val hypotenuseRight = Math.sqrt(xb * xb + normalTarget.y * normalTarget.y)
 
             checkDiagonalsNormal(hypotenuseLeft, hypotenuseRight)
 
