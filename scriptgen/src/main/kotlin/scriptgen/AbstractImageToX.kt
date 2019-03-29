@@ -19,7 +19,7 @@ abstract class AbstractImageToX(fileName: String) : Runnable, AutoCloseable {
     protected val inputG2D = inputBi.createGraphics()!!.apply {
         setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
         color = Color.WHITE
-        stroke = BasicStroke(1.5f)  // a few mm wide pen?
+        stroke = BasicStroke(1f)  // a few mm wide pen?
     }
     protected val script = mutableListOf<Vector2D>()
 

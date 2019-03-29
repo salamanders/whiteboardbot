@@ -26,17 +26,19 @@ class ImageToStrokes(fileName: String,
         val pOrigin = Point(origin.x.roundToInt(), origin.y.roundToInt())
         val samples: List<Deferred<Pair<Point, Double>?>> = (0..searchSteps).map {
             async {
-                // Gaussian random hops
-                val nextPotentialPoint = Point(
+                // Gaussian random hops.  This would be a really good swarm-optimizer!
+                val p0 = Point(
                         (origin.x + ThreadLocalRandom.current().nextGaussian() * largestHop).roundToInt(),
                         (origin.y + ThreadLocalRandom.current().nextGaussian() * largestHop).roundToInt()
                 )
-                if (inputDim.contains(nextPotentialPoint) && pOrigin.distance(nextPotentialPoint) > 2) {
-                    val line = Line2D.Double(pOrigin, nextPotentialPoint)
-                    val avgInk = line.points().map { point ->
+
+                if (inputDim.contains(p0) && pOrigin.distance(p0) > 2) {
+
+                    val avgInk0 = Line2D.Double(pOrigin, p0).points().map { point ->
                         1 - inputBi.getLum(point.x.toInt(), point.y.toInt())
                     }.map { it * it }.average()
-                    Pair(nextPotentialPoint, avgInk)
+
+                    Pair(p0, avgInk0)
                 } else {
                     null
                 }
@@ -53,14 +55,17 @@ class ImageToStrokes(fileName: String,
     override fun run() {
         script.add(Vector2D(inputDim.width / 2.0, inputDim.height / 2.0)) // Start in center
         for (i in 0..strokes) {
+            if (i % 100 == 0) {
+                LOG.info { "$i of $strokes" }
+            }
             script.add(getNextLocation(script.last()))
         }
     }
 }
 
 fun main() = ImageToStrokes(
-        "sundar5.png",
-        2_000,
+        "mountains.png",
+        1_200,
         20_000,
-        0.5).use { it.run() }
+        0.1).use { it.run() }
 

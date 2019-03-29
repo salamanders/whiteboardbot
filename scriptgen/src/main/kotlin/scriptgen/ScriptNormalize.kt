@@ -24,9 +24,18 @@ fun fileToPath(svgXmlFile: File): List<Vector2D> {
     return points
 }
 
+fun removeDuplicates(points: List<Vector2D>) = points.filterIndexed { index, vector2D ->
+    if (index == 0) {
+        true
+    } else {
+        vector2D != points[index - 1]
+    }
+}
+
+
 fun ramerDouglasPeucker(points: List<Vector2D>, maxSize: Int = 1_000): List<Vector2D> {
     LOG.info { "ramerDouglasPeucker from ${points.size} to $maxSize" }
-    var maxDelta = 0.01
+    var maxDelta = 0.00001
     var iterations = 0
     val result = points.toMutableList()
     result.addAll(points)

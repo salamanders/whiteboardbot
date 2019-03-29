@@ -73,7 +73,7 @@ abstract class AbstractImageToScaleFree(fileName: String) : AutoCloseable {
                 setRenderingHint(RenderingHints.KEY_ANTIALIASING, RenderingHints.VALUE_ANTIALIAS_ON)
                 color = Color.BLACK
                 // a few mm wide pen?
-                stroke = BasicStroke((2f / 1000) * outputImageRes)
+                stroke = BasicStroke((1f / 1000) * outputImageRes)
             }
 
             // Needs a better way to tell if a point matters or not.
