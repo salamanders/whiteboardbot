@@ -64,8 +64,8 @@ class ImageToStrokes(fileName: String,
 }
 
 fun main() = ImageToStrokes(
-        "mountains.png",
+        "ray.png",
         1_200,
-        20_000,
-        0.1).use { it.run() }
+        10_000,
+        0.3).use { it.run() }
 

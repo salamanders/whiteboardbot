@@ -3,5 +3,6 @@ input_scribbled.png
 src/main/kotlin/scriptgen/Temp.kt
 src/main/resources/*.png
 in/*.png
+in/*.jpg
 out/*.png
 target/classes/META-INF/scriptgen.kotlin_module

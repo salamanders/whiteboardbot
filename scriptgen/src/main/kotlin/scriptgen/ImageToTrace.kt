@@ -56,7 +56,7 @@ class ImageToTrace(fileName: String) : AbstractImageToX(fileName) {
 
     override fun run() {
         // Lots hinges on this
-        inputG2D.stroke = BasicStroke(1f)
+        inputG2D.stroke = BasicStroke(3f)
 
         // Start in upper-right
         script.add(Vector2D((inputDim.width - 1).toDouble(), 0.0))
@@ -82,7 +82,7 @@ class ImageToTrace(fileName: String) : AbstractImageToX(fileName) {
 
         val tmp = script.toMutableList()
         script.clear()
-        script.addAll(ramerDouglasPeucker(tmp, 10000))
+        script.addAll(ramerDouglasPeucker(tmp, 3000))
 
         outputG2d.apply {
             color = Color.BLACK
@@ -97,5 +97,5 @@ class ImageToTrace(fileName: String) : AbstractImageToX(fileName) {
     }
 }
 
-fun main() = ImageToTrace("mountains.png").use { it.run() }
+fun main() = ImageToTrace("ray.png").use { it.run() }
 
