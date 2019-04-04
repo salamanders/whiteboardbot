@@ -4,8 +4,8 @@
 workspace.xml
 
 **/.idea/libraries/*
-**/idea/inspectionProfiles/*
-**/idea/dictionaries/*
+**/.idea/inspectionProfiles/*
+**/.idea/dictionaries/*
 
 # Created by https://www.gitignore.io/api/osx,java,linux,kotlin,windows,intellij,firebase
 # Edit at https://www.gitignore.io/?templates=osx,java,linux,kotlin,windows,intellij,firebase
