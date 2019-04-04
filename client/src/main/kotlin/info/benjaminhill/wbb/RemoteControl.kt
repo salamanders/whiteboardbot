@@ -5,11 +5,10 @@ import com.google.gson.JsonParser
 import com.google.gson.reflect.TypeToken
 import kotlinx.coroutines.*
 import mu.KotlinLogging
-import java.io.Closeable
 import java.net.URL
 import kotlin.coroutines.CoroutineContext
 
-class RemoteControl(scriptURL: String) : AutoCloseable, Closeable, Runnable, CoroutineScope {
+class RemoteControl(scriptURL: String) : AutoCloseable, Runnable, CoroutineScope {
 
     private val job = Job()
     override val coroutineContext: CoroutineContext get() = job + backgroundPool
