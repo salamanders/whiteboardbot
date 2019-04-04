@@ -1,13 +1,16 @@
 **/package-lock.json
 **/*.old
 **/target/*
+workspace.xml
 
+**/.idea/libraries/*
+**/idea/inspectionProfiles/*
+**/idea/dictionaries/*
 
 # Created by https://www.gitignore.io/api/osx,java,linux,kotlin,windows,intellij,firebase
 # Edit at https://www.gitignore.io/?templates=osx,java,linux,kotlin,windows,intellij,firebase
 
 ### Firebase ###
-.idea
 **/node_modules/*
 **/.firebaserc
 
