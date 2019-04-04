@@ -8,7 +8,7 @@ import java.io.File
 import java.util.*
 import javax.xml.parsers.DocumentBuilderFactory
 
-val LOG = KotlinLogging.logger {}
+private val LOG = KotlinLogging.logger {}
 
 /** Hacky parse of a SVG, like what StippleGen2 produces */
 fun fileToPath(svgXmlFile: File): List<Vector2D> {

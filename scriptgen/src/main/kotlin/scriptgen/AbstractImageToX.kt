@@ -2,6 +2,7 @@ package scriptgen
 
 import info.benjaminhill.wbb.NormalVector2D
 import kotlinx.coroutines.asCoroutineDispatcher
+import mu.KotlinLogging
 import org.apache.commons.math3.geometry.euclidean.twod.Vector2D
 import java.awt.BasicStroke
 import java.awt.Color
@@ -31,5 +32,9 @@ abstract class AbstractImageToX(fileName: String) : Runnable, AutoCloseable {
         ImageIO.write(inputBi, "png", File("scriptgen/out/decimated_$name.png"))
         AbstractImageToScaleFree.writeScriptFiles(NormalVector2D.normalizePoints(script.map { Vector2D(it.x.toDouble(), it.y.toDouble()) }), name)
         dispatcher.close()
+    }
+
+    companion object {
+        val LOG = KotlinLogging.logger {}
     }
 }

@@ -53,4 +53,4 @@ class ImageToSpiral(fileName: String, private val numberOfSpins: Int) : Abstract
     }
 }
 
-fun main() = ImageToSpiral("ray.png", 100).use { it.run() }
+fun main() = ImageToSpiral("liberty.png", 100).use { it.run() }

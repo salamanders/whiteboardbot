@@ -133,4 +133,4 @@ class ImageToScan(fileName: String) : AbstractImageToScaleFree(fileName) {
     }
 }
 
-fun main() = ImageToScan("shark.png").use { it.run() }
+fun main() = ImageToScan("liberty.png").use { it.run() }

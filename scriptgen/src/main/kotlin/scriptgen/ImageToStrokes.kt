@@ -18,11 +18,16 @@ import kotlin.math.roundToInt
 class ImageToStrokes(fileName: String,
                      private val strokes: Int,
                      private val searchSteps: Int,
-                     private val maxPctHop: Double
+                      maxPctHop: Double
 ) : AbstractImageToX(fileName) {
 
+    private val largestHop = (maxPctHop * Math.max(inputDim.width, inputDim.height)).also {
+        LOG.info { "Largest hop: $it"}
+    }
+
+
     override fun getNextLocation(origin: Vector2D): Vector2D = runBlocking(dispatcher) {
-        val largestHop = maxPctHop * Math.max(inputDim.width, inputDim.height)
+
         val pOrigin = Point(origin.x.roundToInt(), origin.y.roundToInt())
         val samples: List<Deferred<Pair<Point, Double>?>> = (0..searchSteps).map {
             async {
@@ -63,9 +68,11 @@ class ImageToStrokes(fileName: String,
     }
 }
 
+
+
 fun main() = ImageToStrokes(
-        "ray.png",
-        1_200,
-        10_000,
-        0.3).use { it.run() }
+        "liberty.png",
+        2_000,
+        20_000,
+        0.1).use { it.run() }
 
