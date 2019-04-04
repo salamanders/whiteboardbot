@@ -1,6 +1,6 @@
 **/package-lock.json
 **/*.old
-
+**/target/*
 
 
 # Created by https://www.gitignore.io/api/osx,java,linux,kotlin,windows,intellij,firebase
