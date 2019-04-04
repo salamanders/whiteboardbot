@@ -97,5 +97,5 @@ class ImageToTrace(fileName: String) : AbstractImageToX(fileName) {
     }
 }
 
-fun main() = ImageToTrace("ray.png").use { it.run() }
+fun main() = ImageToTrace("liberty.png").use { it.run() }
 
