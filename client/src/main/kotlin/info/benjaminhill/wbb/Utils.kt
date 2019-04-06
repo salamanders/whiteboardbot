@@ -81,7 +81,7 @@ fun URL.readTextSupportGZIP(): String {
             LOG.debug { "Able to read GZIP content" }
             InputStreamReader(GZIPInputStream(con.inputStream))
         } else {
-            LOG.debug { "Able to read plain content" }
+            LOG.debug { "No GZIP, fallback to plain content" }
             InputStreamReader(con.inputStream)
         }.use { reader ->
             return reader.readText()

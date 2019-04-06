@@ -22,8 +22,10 @@ http://www.lejos.org/ev3/docs/
     
 To recreate the runtime
 
-    # Download from http://www.oracle.com/technetwork/java/embedded/downloads/java-embedded-java-se-download-359230.html
-    # NOTE: The "-g" is from [stack overflow](https://stackoverflow.com/questions/23275519/jdwp-in-embedded-jre-in-java-8)
+1. Download from http://www.oracle.com/technetwork/java/embedded/downloads/java-embedded-java-se-download-359230.html
+2. NOTE: The "-g" is from [stack overflow](https://stackoverflow.com/questions/23275519/jdwp-in-embedded-jre-in-java-8)
+
+
     gunzip ejdk-8-fcs-b132-linux-arm-sflt-03_mar_2014.tar.gz
     tar xvf ejdk-8-fcs-b132-linux-arm-sflt-03_mar_2014.tar
     cd ejdk1.8.0/bin
