@@ -1,18 +1,60 @@
 /*jshint esversion: 6 */
 /*jshint bitwise: false*/
 
-// Global objects
 const sourceCanvas = document.getElementById('sourceCanvas');
 const scriptCanvas = document.getElementById('scriptCanvas');
 const script = []; // finished when long enough
 
-const prepImage = (img) => {
+const NUM_PARTICLES = 100,
+  OPTIMIZER_STEPS = 50,
+  SCRIPT_LENGTH = 800;
 
+const setDefaultImage = () => {
+  const img = new Image();
+  img.onload = () => {
+    console.info('Starting on default image.');
+    prepImage(img);
+  };
+  img.src = 'liberty.png';
+};
+
+const enableImageUpload = (imageEltId = 'imageLoader') => {
+  // Custom file upload (optional)
+  const handleImageUpload = e => {
+    const reader = new FileReader();
+    reader.onload = event => {
+      const img = new Image();
+      img.onload = () => {
+        console.info('Starting on custom uploaded image.');
+        prepImage(img);
+      };
+      img.src = event.target.result;
+    };
+    reader.readAsDataURL(e.target.files[0]);
+  };
+  const imageLoader = document.getElementById(imageEltId);
+  imageLoader.addEventListener('change', handleImageUpload, false);
+};
+
+/** Once you have an image, insert it into the canvas and start playing. */
+const prepImage = img => {
   sourceCanvas.width = img.width;
   sourceCanvas.height = img.height;
   scriptCanvas.width = sourceCanvas.width;
   scriptCanvas.height = sourceCanvas.height;
   sourceCanvas.getContext('2d').drawImage(img, 0, 0);
+
+  // Convert to grayscale (could mess with contrast here)
+  const sourceImageData = sourceCanvas.getContext('2d').getImageData(0, 0, sourceCanvas.width, sourceCanvas.height);
+  const data = sourceImageData.data;
+  for (let i = 0; i < data.length; i += 4) {
+    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
+    data[i] = avg; // red
+    data[i + 1] = avg; // green
+    data[i + 2] = avg; // blue
+  }
+  sourceCanvas.getContext('2d').putImageData(sourceImageData, 0, 0);
+  console.info("Converted to grayscale.");
 
   while (script.length > 0) {
     script.pop();
@@ -22,35 +64,17 @@ const prepImage = (img) => {
   window.requestAnimationFrame(imageToLineDrawing);
 };
 
-// Start with default
-const img = new Image();
-img.onload = () => {
-  console.info('Starting on default image.');
-  prepImage(img);
-};
-img.src = 'liberty.png';
 
-// Custom file upload (optional)
-const handleImageUpload = e => {
-  const reader = new FileReader();
-  reader.onload = event => {
-    const img = new Image();
-    img.onload = () => {
-      console.info('Starting on custom uploaded image.');
-      prepImage(img);
-    };
-    img.src = event.target.result;
-  };
-  reader.readAsDataURL(e.target.files[0]);
-};
-const imageLoader = document.getElementById('imageLoader');
-imageLoader.addEventListener('change', handleImageUpload, false);
-
-
-// https://stackoverflow.com/questions/4672279/bresenham-algorithm-in-javascript
+/**
+ * All points along a line.
+ * https://stackoverflow.com/questions/4672279/bresenham-algorithm-in-javascript
+ * Guard against doubles.
+ */
 const lineToPoints = (p1, p2) => {
-  let [x1, y1] = p1;
-  const [x2, y2] = p2;
+  let x1 = Math.floor(p1[0]),
+    y1 = Math.floor(p1[1]);
+  const x2 = Math.floor(p2[0]),
+    y2 = Math.floor(p2[1]);
 
   const coordinatesArray = [],
     dx = Math.abs(x2 - x1),
@@ -77,8 +101,15 @@ const lineToPoints = (p1, p2) => {
   return coordinatesArray;
 };
 
-/** Draw just one more step */
+window.converge = Array(OPTIMIZER_STEPS);
+window.converge.fill(255);
+
+/** The fun part: Draw just one more step */
 const imageToLineDrawing = () => {
+  if (script.length % 50 === 0) {
+    console.info(`Building script step ${script.length}`);
+  }
+
   const width = sourceCanvas.width,
     height = sourceCanvas.height,
     sourceCtx = sourceCanvas.getContext('2d'),
@@ -87,54 +118,59 @@ const imageToLineDrawing = () => {
   // Faster to get .data now once
   const sourceImageData = sourceCtx.getImageData(0, 0, width, height).data;
 
-  // Convert to grayscale (could mess with contrast here)
-  /*
-  const data = sourceImageData.data;
-  for (let i = 0; i < data.length; i += 4) {
-    const avg = (data[i] + data[i + 1] + data[i + 2]) / 3;
-    data[i] = avg; // red
-    data[i + 1] = avg; // green
-    data[i + 2] = avg; // blue
-  }
-  sourceCtx.putImageData(sourceImageData, 0, 0);
-  console.info("Converted to grayscale.");
-  */
+  /**
+   * Get the red channel
+   * https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Pixel_manipulation_with_canvas
+   */
+  const pixelToLum = p1 => sourceImageData[p1[1] * (width * 4) + p1[0] * 4];
 
-  // https://developer.mozilla.org/en-US/docs/Web/API/Canvas_API/Tutorial/Pixel_manipulation_with_canvas
-  const pixelToLum = (p1) => {
-    const redIndex = p1[1] * (width * 4) + p1[0] * 4;
-    return sourceImageData[redIndex];
-  };
-
+  // So we can draw it both on the input and the output.
   const nextStepScript = new Path2D();
 
-  let point = script.slice(-1)[0];
-  nextStepScript.moveTo(point[0], point[1]);
+  const origin = script.slice(-1)[0];
+  nextStepScript.moveTo(origin[0], origin[1]);
 
-  let leastLum = 255;
-  let leastLumPoint = [];
-  for (let sampleNum = 0; sampleNum < 5000; sampleNum++) {
-    const nextPoint = [
-      Math.floor(Math.random() * width),
-      Math.floor(Math.random() * height)
-    ];
-    const pixelsOnLine = lineToPoints(point, nextPoint);
-    const avgLum = pixelsOnLine.reduce((totalLum, p1) => totalLum + pixelToLum(p1), 0) / pixelsOnLine.length;
-    if (avgLum < leastLum) {
-      leastLum = avgLum;
-      leastLumPoint = nextPoint;
-      // console.debug(`Sample ${sampleNum} found a new best: (${leastLumPoint})=${leastLum}`);
+  // https://github.com/adrianton3/pso.js/
+  const optimizer = new pso.Optimizer();
+  optimizer.setObjectiveFunction(potentialPoint => {
+    // Ignore out-of-bounds points.
+    if (potentialPoint[0] < 0 || potentialPoint[0] >= width || potentialPoint[1] < 0 || potentialPoint[1] >= height) {
+      return -1;
     }
+    const pixelsOnLine = lineToPoints(origin, potentialPoint);
+    const avgLum = pixelsOnLine.reduce((totalLum, p1) => totalLum + pixelToLum(p1), 0) / pixelsOnLine.length;
+    return 255 - avgLum;
+  });
+  optimizer.init(NUM_PARTICLES, [{start: 0, end: width}, {start: 0, end: height}]);
+
+  for (let i = 0; i < OPTIMIZER_STEPS; i++) {
+    window.converge[i] += optimizer.getBestFitness();
+    optimizer.step();
   }
-  nextStepScript.lineTo(leastLumPoint[0], leastLumPoint[1]);
-  script.push(leastLumPoint);
+
+  const bestNextPoint = optimizer.getBestPosition();
+  console.debug(optimizer.getBestFitness(), bestNextPoint);
+
+  nextStepScript.lineTo(bestNextPoint[0], bestNextPoint[1]);
+  script.push(bestNextPoint);
 
   sourceCtx.strokeStyle = '#FFFFFF';
   sourceCtx.lineWidth = 2.0;
   sourceCtx.stroke(nextStepScript);
   scriptCtx.stroke(nextStepScript);
 
-  if (script.length < 500) {
+
+  if (script.length < SCRIPT_LENGTH) {
     window.requestAnimationFrame(imageToLineDrawing);
+  } else {
+    console.debug('Convergence speed:');
+    for (let i = 0; i < OPTIMIZER_STEPS; i++) {
+      window.converge[i] = Math.floor(window.converge[i] / SCRIPT_LENGTH);
+    }
+    console.debug(window.converge);
   }
 };
+
+
+setDefaultImage();
+enableImageUpload();
